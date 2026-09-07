@@ -1,7 +1,7 @@
 # BriefMe 使用与二次开发手册
 
 > 中冶赛迪（重庆）信息技术有限公司 · 多场景数据统计助手  
-> 当前接入：永锋钢铁打包带 / 镔鑫钢铁废钢检判 / 盛隆钢铁废钢检判  
+> 当前接入：永锋钢铁（打包带 / 烧结矿 / 检判原图） / 镔鑫钢铁废钢检判 / 盛隆钢铁废钢检判  
 > 读者：使用者、实习生、后续维护开发者
 
 ---
@@ -25,14 +25,16 @@
 ### 1.1 进入项目目录
 
 ```bash
-cd /Users/wangyutai/Documents/agent智能体大赛
+cd BriefMe_Agent
 ```
+
+建议用仓库 `venv` 的 `python`（与 GitHub Readme 一致）。下面命令里的 `python` 都指这个解释器。
 
 ### 1.2 安装依赖
 
 ```bash
-/opt/anaconda3/bin/pip install -r requirements.txt
-/opt/anaconda3/bin/pip install python-pptx
+python -m pip install -r requirements.txt
+python -m pip install python-pptx
 ```
 
 主要依赖：
@@ -63,7 +65,7 @@ export DEEPSEEK_API_KEY="<向负责人索取的 DeepSeek API Key>"
 
 | 场景 | VPN / 网络 | 自检地址 |
 |---|---|---|
-| 永锋打包带 | 永锋 aTrust，手机 Google Authenticator 验证码 | http://vision.lg.china-yongfeng.com/packing-tape/ |
+| 永锋打包带 / 烧结矿 / 检判原图 | 永锋 aTrust，手机 Google Authenticator 验证码 | 打包带：http://vision.lg.china-yongfeng.com/packing-tape/ ；检判原图：http://vision.lg.china-yongfeng.com/srape-steel |
 | 镔鑫废钢 | 镔鑫专网 | http://172.31.1.102:8081/fcs-web/ |
 | 盛隆废钢 | 盛隆专网 | http://172.16.16.101:3000/ |
 
@@ -72,7 +74,7 @@ export DEEPSEEK_API_KEY="<向负责人索取的 DeepSeek API Key>"
 ### 1.5 启动页面
 
 ```bash
-/opt/anaconda3/bin/python app.py
+python app.py
 ```
 
 看到类似输出就成功：
@@ -108,6 +110,8 @@ Ctrl+C
 | 近 7 天【盛隆】报表 | 生成盛隆单周期 Excel（昨天往前 7 天，不含今天） |
 | 【盛隆】主表（多周期累积·可改日期） | 生成盛隆普通多周期主表 |
 | 【盛隆】重废归一化主表（排除无重废车次） | 生成盛隆新准确率口径主表 |
+| 下载昨日/近 7 天/指定日期【永锋】检判原图 | 从 srape-steel 按日按车下载智能判级原图（先填保存路径） |
+| 确认打包【永锋】多标签数据集 | 人工删完不合格图后再打永锋「废钢多标签分类数据集」 |
 | 下载昨日/近 7 天/指定日期【盛隆】检判原图 | 从 3000 按日按车下载智能判级原图（先填保存路径） |
 | 确认打包【盛隆】多标签数据集 | 人工删完不合格图后再打「废钢多标签分类数据集」 |
 | 昨日打包带情况 | 生成永锋打包带文本汇总 |
@@ -137,6 +141,23 @@ Ctrl+C
 - 正常、异常、未识别数量。
 - 已打数与应打数差值为 1 / 大于 1 的异常数量。
 - 差值大于 1 的异常图片。
+
+### 3.1.1 永锋钢铁 · 检判原图下载
+
+前置：同一张永锋 VPN。顶部灯仍探测打包带地址。指令必须带【永锋】。只走 `srape-steel`，不要走盛隆 3000，不要走烧结矿报表。左侧「图像保存路径」必填（绝对路径）。
+
+```text
+下载 2026-09-01 的【永锋】检判原图
+下载 2026-08-31 到 2026-09-01 的【永锋】检判原图
+下载 2026-08-31、2026-09-01 的【永锋】检判原图
+确认打包保存目录下已筛完的【永锋】废钢多标签分类数据集
+```
+
+- 只拉详情「智能判级照片」原图（跳过 `*_render_*`），立刻写磁盘；已有非空 JPEG 跳过。
+- 顿号枚举不补中间天；「A 到 B」才连续。无具体日期时，「昨天/昨日」「近 7 天/近一周」按手册展开（近 7 天不含今天）。
+- 车次文件夹：`YYYY-MM-DD_车牌_重废1(85)、重废2(15)`。默不加当日序号；仅第二辆同车牌同料型用 `_N`。
+- scp 到 `cisdi@10.233.224.206:.../yf_feigang/test_images_full_car/<日期>/`，不拷 `datasets/`，禁止写入 `sl_feigang`。失败不中断下载。
+- 实例/边缘包自动打；多标签必须人工筛图后确认。0 车不建空 `datasets/`。
 
 ### 3.2 镔鑫钢铁 · 废钢检判
 
@@ -254,20 +275,20 @@ downloads/shenglong/master/
 镔鑫导出：
 
 ```bash
-/opt/anaconda3/bin/python tools/scrap_export.py --start 2026-04-22 --end 2026-04-28
-/opt/anaconda3/bin/python tools/scrap_export.py --start 2026-04-22 --end 2026-04-28 --no-images
+python tools/scrap_export.py --start 2026-04-22 --end 2026-04-28
+python tools/scrap_export.py --start 2026-04-22 --end 2026-04-28 --no-images
 ```
 
 盛隆单周期：
 
 ```bash
-/opt/anaconda3/bin/python tools/shenglong_export.py --start 2026-04-23 --end 2026-04-29
+python tools/shenglong_export.py --start 2026-04-23 --end 2026-04-29
 ```
 
 盛隆普通多周期主表：
 
 ```bash
-/opt/anaconda3/bin/python tools/shenglong_master_export.py \
+python tools/shenglong_master_export.py \
   2026-04-14:2026-04-22 \
   2026-04-23:2026-04-29 \
   2026-04-30:2026-05-06+ \
@@ -277,7 +298,7 @@ downloads/shenglong/master/
 盛隆重废归一化主表：
 
 ```bash
-/opt/anaconda3/bin/python tools/shenglong_master_export.py \
+python tools/shenglong_master_export.py \
   --heavy-normalized \
   2026-04-14:2026-04-22 \
   2026-04-23:2026-04-29 \
@@ -287,52 +308,53 @@ downloads/shenglong/master/
 
 说明：日期段后面的 `+` 表示“这一段和下一段合并成同一个统计周期”。
 
+永锋检判原图（须永锋 VPN；不要占用烧结矿入口 `python -m agent.yongfeng`）：
+
+```bash
+python -m agent.yongfeng.downloader --start 2026-09-01 --end 2026-09-01 \
+  --output /Users/你的用户名/Desktop/永锋图像
+```
+
 ---
 
 ## 5. 代码结构
 
 ```text
-agent智能体大赛/
+BriefMe_Agent/
 ├── app.py                         # Gradio UI 入口
 ├── requirements.txt
 ├── BriefMe使用手册.md              # 当前交接文档
 │
 ├── config/
-│   └── settings.py                # 三个场景的 URL、账号、目标值
+│   └── settings.py                # 各场景 URL、账号、目标值（永锋/盛隆 scp 分开）
 │
 ├── agent/
 │   ├── core.py                    # SteelCoilAgent：LLM 路由、工具调用、返回组织
 │   ├── tools.py                   # 给大模型看的 function calling schema
+│   ├── image_download_route.py    # 盛隆/永锋检判原图拦截，必须互斥
 │   ├── llm_client.py              # DeepSeek / OpenAI 兼容客户端
-│   ├── vpn_manager.py             # 永锋 VPN 探测
+│   ├── vpn_manager.py             # 永锋 VPN 探测（打包带地址）
 │   ├── data_fetcher.py            # 永锋打包带取数
 │   │
 │   ├── scrap/                     # 镔鑫废钢，独立子包
-│   │   ├── client.py              # 登录、列表、详情、图片下载
-│   │   ├── parser.py              # 解析人工/AI 结果
-│   │   ├── calculator.py          # 业务统计
-│   │   ├── excel_writer.py        # 镔鑫 xlsx
-│   │   ├── ppt_builder.py         # 镔鑫自研 PPT
-│   │   └── ppt/                   # 同事 skill fallback
-│   │
-│   └── shenglong/                 # 盛隆废钢，独立子包
-│       ├── client.py              # 盛隆登录、列表、详情
-│       ├── dict.py                # 盛隆料型字典、英文码、黑名单、重废目标料型
-│       ├── models.py              # dataclass 数据结构
-│       ├── calculator.py          # 盛隆核心业务规则
-│       ├── excel_writer.py        # 盛隆 xlsx / 多周期主表
-│       ├── downloader.py          # 3000 智能判级原图按日按车下载
-│       ├── naming.py              # 车次文件夹 / 文件名 / 平均料型分组
-│       ├── packager.py            # 实例、边缘、多标签打包
-│       └── remote_sync.py         # 按日 scp 到推理测试机
+│   ├── shenglong/                 # 盛隆废钢：统计 + 3000 原图
+│   └── yongfeng/                  # 烧结矿报表 + 检判原图（scrap_* 禁止 import 盛隆 dict）
+│       ├── downloader.py          # srape-steel 按日按车下载
+│       ├── scrap_client.py        # Cookie satoken；列表 current/size
+│       ├── scrap_naming.py
+│       ├── scrap_packager.py
+│       └── scrap_remote_sync.py   # scp 到 yf_feigang，失败不中断
 │
 ├── tools/
+│   ├── yongfeng_export.py
 │   ├── scrap_export.py
 │   ├── shenglong_export.py
 │   └── shenglong_master_export.py
 │
 ├── tests/
-│   ├── test_scrap_*.py
+│   ├── test_yongfeng_download.py
+│   ├── test_image_download_route.py
+│   ├── test_handbook_adversarial.py
 │   ├── test_shenglong_unit.py
 │   ├── test_shenglong_download.py
 │   └── test_shenglong_remote_sync.py
@@ -386,6 +408,9 @@ downloads/ 下展示给页面
 - 镔鑫的 `steelType` 编码和盛隆不同。
 - 镔鑫“重废不分级”和盛隆“重废1/2/3归一化”不是一回事。
 - 盛隆有检判员黑名单，镔鑫没有这套规则。
+- 永锋检判原图不要 import `agent.shenglong.dict` / `ShenglongClient`，不要写入 `sl_feigang`。
+- 不要用「永锋 + MINIO图像下载」去调盛隆 3000；裸的 `MINIO图像下载` 仍是盛隆快捷语。
+- 不要改盛隆统计公式来“顺便”给永锋下载用。
 
 ### 7.2 改统计规则必须补测试
 
@@ -430,7 +455,7 @@ downloads/ 下展示给页面
 4. 跑 UI 构建冒烟。
 
 ```bash
-/opt/anaconda3/bin/python -c "import app; app.build_ui(); print('UI OK')"
+python -c "import app; app.build_ui(); print('UI OK')"
 ```
 
 ### 8.2 新增一个大模型工具
@@ -450,7 +475,7 @@ downloads/ 下展示给页面
 - `agent/shenglong/calculator.py` 的 `aggregate_period` / `aggregate_period_heavy_normalized`。
 - `agent/shenglong/excel_writer.py` 的 `_write_one_period_block()` 和 `write_master_xlsx()`。
 
-Sheet1 是每个周期 14 行，多个周期就是 14 行块往下排。
+Sheet1 是每个周期 17 行，多个周期就是 17 行块往下排。
 
 ### 8.4 修改盛隆 Sheet2 明细
 
@@ -477,25 +502,32 @@ Sheet1 是每个周期 14 行，多个周期就是 14 行块往下排。
 每次改完至少跑：
 
 ```bash
-/opt/anaconda3/bin/python -m pytest tests/ -x --tb=short -q
+python -m pytest tests/ -x --tb=short -q
+```
+
+改永锋/盛隆检判原图时再加跑：
+
+```bash
+python -m pytest tests/test_handbook_adversarial.py tests/test_yongfeng_download.py \
+  tests/test_image_download_route.py tests/test_shenglong_download.py -q
 ```
 
 只看盛隆：
 
 ```bash
-/opt/anaconda3/bin/python tests/test_shenglong_unit.py
+python tests/test_shenglong_unit.py
 ```
 
 只看 UI 能否构建：
 
 ```bash
-/opt/anaconda3/bin/python -c "import app; app.build_ui(); print('UI OK')"
+python -c "import app; app.build_ui(); print('UI OK')"
 ```
 
 如果连了盛隆 VPN，真实导出普通主表：
 
 ```bash
-/opt/anaconda3/bin/python tools/shenglong_master_export.py \
+python tools/shenglong_master_export.py \
   2026-04-14:2026-04-22 \
   2026-04-23:2026-04-29
 ```
@@ -503,7 +535,7 @@ Sheet1 是每个周期 14 行，多个周期就是 14 行块往下排。
 如果连了盛隆 VPN，真实导出重废归一化主表：
 
 ```bash
-/opt/anaconda3/bin/python tools/shenglong_master_export.py \
+python tools/shenglong_master_export.py \
   --heavy-normalized \
   2026-04-14:2026-04-22 \
   2026-04-23:2026-04-29 \
@@ -519,9 +551,9 @@ Sheet1 是每个周期 14 行，多个周期就是 14 行块往下排。
 
 先用浏览器打开对应业务系统首页。打不开就是 VPN 或网络问题，不是代码问题。打开后再点页面上的“刷新 VPN 状态”。
 
-### Q2. 只说“废钢”，agent 反问
+### Q2. 只说“废钢”或只说“检判原图”，agent 反问
 
-这是故意设计。镔鑫和盛隆都是废钢，但数据、API、字典和规则都不同。指令里带【镔鑫】或【盛隆】即可。
+这是故意设计。镔鑫和盛隆都是废钢，盛隆和永锋都有检判原图，数据、API、字典都不同。指令里带【镔鑫】【盛隆】或【永锋】即可。两厂写在同一句里会拒绝，避免混下。
 
 ### Q3. `InvalidPathError: Dotfiles ...`
 
@@ -533,6 +565,7 @@ WPS/Excel 打开文件时可能生成 `.~xxx.xlsx` 临时锁文件。`app.py` �
 
 - 镔鑫 token：`satoken`。
 - 盛隆 token：`scrape-steel-token`，token 路径是 `data.tokenInfo.tokenValue`。
+- 永锋检判原图 token：Cookie 名 `satoken`，列表分页字段是 `current` / `size`（不要抄盛隆 `pageIndex`）。
 
 ### Q5. Excel 里出现很大的扣重，比如 26 或 2280
 
@@ -552,6 +585,10 @@ WPS/Excel 打开文件时可能生成 `.~xxx.xlsx` 临时锁文件。`app.py` �
 
 不从 MinIO 下。只走 3000 业务系统的「智能判级照片」。先填保存路径，再发「下载 … 的【盛隆】检判原图」。多标签包要人工删图后确认打包。scp 到测试机失败不会停下载。
 
+### Q8. 永锋说 MINIO / 3000 会下到盛隆吗
+
+不会。带「永锋」的 `MINIO图像下载` / `3000网站图像下载` 走永锋 srape-steel。只有不带永锋的裸快捷语才是盛隆。永锋照片 URL 里的 MinIO `origin` 只是原图 HTTP 源，不是盛隆测试机。
+
 ---
 
 ## 11. 当前重点功能清单
@@ -560,6 +597,9 @@ WPS/Excel 打开文件时可能生成 `.~xxx.xlsx` 临时锁文件。`app.py` �
 |---|---|---|
 | 永锋打包带日统计 | 已实现 | `agent/data_fetcher.py` |
 | 永锋异常图下载 | 已实现 | `agent/data_fetcher.py` |
+| 永锋检判原图下载 | 已实现 | `agent/yongfeng/downloader.py`（srape-steel） |
+| 永锋原图命名 / 打包 / scp | 已实现 | `scrap_naming.py` / `scrap_packager.py` / `scrap_remote_sync.py`（`yf_feigang`，失败不中断） |
+| 永锋多标签分类数据集（人工确认） | 已实现 | `pack_multilabel_from_disk()`（永锋 packager） |
 | 镔鑫日/区间统计 | 已实现 | `agent/scrap/` |
 | 镔鑫错判图下载 | 已实现 | `agent/scrap/client.py` |
 | 镔鑫 PPT | 已实现 | `agent/scrap/ppt_builder.py` |
@@ -580,7 +620,7 @@ WPS/Excel 打开文件时可能生成 `.~xxx.xlsx` 临时锁文件。`app.py` �
 2. 不连 VPN，先跑单测：
 
 ```bash
-/opt/anaconda3/bin/python -m pytest tests/ -x --tb=short -q
+python -m pytest tests/ -x --tb=short -q
 ```
 
 3. 阅读这 5 个文件：
@@ -589,8 +629,8 @@ WPS/Excel 打开文件时可能生成 `.~xxx.xlsx` 临时锁文件。`app.py` �
 app.py
 agent/core.py
 agent/tools.py
-agent/shenglong/calculator.py
-agent/shenglong/excel_writer.py
+agent/image_download_route.py
+agent/yongfeng/downloader.py
 ```
 
 4. 用 `tools/shenglong_master_export.py --help` 看 CLI 参数。
@@ -599,4 +639,4 @@ agent/shenglong/excel_writer.py
 
 ---
 
-最后更新：2026-05-21
+最后更新：2026-09-07
