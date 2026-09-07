@@ -23,11 +23,11 @@ import httpx
 from agent.core import SteelCoilAgent, _parse_save_path
 from agent.image_download_route import (
     is_ambiguous_multilabel_pack,
+    is_dual_plant_image_or_pack_request,
     is_shenglong_image_download,
     is_shenglong_multilabel_pack,
     is_yongfeng_image_download,
     is_yongfeng_multilabel_pack,
-    mentions_both_plants,
 )
 from agent.shenglong.calculator import last_complete_7_days
 from agent.shenglong.downloader import (
@@ -909,11 +909,7 @@ def build_ui() -> gr.Blocks:
 
             agent._default_shenglong_output_dir = (save_dir or "").strip()
             agent._default_yongfeng_output_dir = (save_dir or "").strip()
-            if mentions_both_plants(user_message) and (
-                "检判原图" in user_message
-                or "智能判级照片" in user_message
-                or "多标签" in user_message
-            ):
+            if is_dual_plant_image_or_pack_request(user_message):
                 xlsx, pptx, imgs = _scan_latest_artifacts()
                 history = _normalize_chat_history(history)
                 history.append({

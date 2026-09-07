@@ -47,6 +47,20 @@ def _legacy_image_download_shortcut(message: str) -> bool:
     return "MINIO图像下载" in message or "3000网站图像下载" in message
 
 
+def is_dual_plant_image_or_pack_request(message: str) -> bool:
+    """两厂同句的原图/快捷语/多标签，拦截层直接拒绝，不交给 LLM。"""
+    if not mentions_both_plants(message):
+        return False
+    return (
+        "检判原图" in message
+        or "智能判级照片" in message
+        or "多标签" in message
+        or _legacy_image_download_shortcut(message)
+        or "图像下载" in message
+        or "图片下载" in message
+    )
+
+
 def is_yongfeng_image_download(message: str) -> bool:
     if is_yongfeng_multilabel_pack(message) or mentions_both_plants(message):
         return False

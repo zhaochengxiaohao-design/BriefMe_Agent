@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agent.image_download_route import (
     is_ambiguous_multilabel_pack,
+    is_dual_plant_image_or_pack_request,
     is_shenglong_image_download,
     is_shenglong_multilabel_pack,
     is_yongfeng_image_download,
@@ -63,6 +64,14 @@ def test_both_plants_are_refused_by_intercept():
     pack = "确认打包【永锋】【盛隆】废钢多标签分类数据集"
     assert not is_yongfeng_multilabel_pack(pack)
     assert not is_shenglong_multilabel_pack(pack)
+    shortcut = "下载【永锋】【盛隆】3000网站图像下载"
+    assert is_dual_plant_image_or_pack_request(shortcut)
+    assert not is_yongfeng_image_download(shortcut)
+    assert not is_shenglong_image_download(shortcut)
+    minio = "下载【永锋】【盛隆】MINIO图像下载"
+    assert is_dual_plant_image_or_pack_request(minio)
+    assert not is_yongfeng_image_download(minio)
+    assert not is_shenglong_image_download(minio)
 
 
 if __name__ == "__main__":

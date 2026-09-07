@@ -23,6 +23,17 @@ LOGIN_RETRIES = 3
 LOGIN_RETRY_DELAY = 1.5
 
 
+def _token_from_login(body: dict, cookie_value: str | None) -> str:
+    """JSON tokenInfo 优先，其次 Cookie satoken / data.tokenValue。"""
+    data = body.get("data") or {}
+    token_info = data.get("tokenInfo") or {}
+    return (
+        str(token_info.get("tokenValue") or "").strip()
+        or str(cookie_value or "").strip()
+        or str(data.get("tokenValue") or "").strip()
+    )
+
+
 class YongfengScrapClient:
     def __init__(self) -> None:
         cfg = settings.yongfeng_scrap
@@ -60,9 +71,9 @@ class YongfengScrapClient:
                 body = resp.json()
                 if not (body.get("meta") or {}).get("success"):
                     raise RuntimeError(f"永锋登录失败: {body}")
-                self.token = ((body.get("data") or {}).get("tokenInfo") or {}).get("tokenValue")
+                self.token = _token_from_login(body, self.session.cookies.get(self.cfg.cookie_name))
                 if not self.token:
-                    raise RuntimeError("永锋登录成功但未返回 token")
+                    raise RuntimeError("永锋登录成功但未返回 token / satoken")
                 self.session.cookies.set(self.cfg.cookie_name, self.token)
                 logger.info("永锋废钢系统登录成功 token=%s…", self.token[:8])
                 return

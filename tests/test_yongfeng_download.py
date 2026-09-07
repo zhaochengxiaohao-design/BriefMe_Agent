@@ -29,7 +29,7 @@ from agent.yongfeng.downloader import (
     _write_flow_mark,
     parse_requested_dates,
 )
-from agent.yongfeng.scrap_client import YongfengScrapClient
+from agent.yongfeng.scrap_client import YongfengScrapClient, _token_from_login
 from agent.yongfeng.scrap_packager import (
     MULTILABEL_NAME,
     pack_day_datasets,
@@ -296,6 +296,29 @@ def test_parse_save_path():
     print("parse path OK")
 
 
+def test_login_token_falls_back_to_satoken_cookie():
+    body = {"meta": {"success": True}, "data": {}}
+    assert _token_from_login(body, "cookie-satoken") == "cookie-satoken"
+    json_body = {"data": {"tokenInfo": {"tokenValue": "json-token"}}}
+    assert _token_from_login(json_body, "cookie-satoken") == "json-token"
+    assert _token_from_login({"data": {"tokenValue": "flat"}}, "") == "flat"
+
+    client = YongfengScrapClient()
+
+    class _Resp:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"meta": {"success": True}, "data": {}}
+
+    client.session.post = lambda *args, **kwargs: _Resp()
+    client.session.cookies.set("satoken", "from-cookie")
+    client.login()
+    assert client.token == "from-cookie"
+    print("login cookie fallback OK")
+
+
 def test_yongfeng_scp_configured_from_site_isolated_from_shenglong(tmp_path: Path):
     yf = settings.yongfeng_scrap
     sl = settings.shenglong
@@ -435,4 +458,5 @@ if __name__ == "__main__":
     test_query_list_paginates_dedupes_and_skips_pageindex()
     test_parse_requested_dates_single_range_and_list()
     test_parse_save_path()
+    test_login_token_falls_back_to_satoken_cookie()
     print("\nAll yongfeng download tests PASSED")

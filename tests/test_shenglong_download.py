@@ -206,11 +206,26 @@ def test_unique_truck_dir_collision_keeps_second_truck_separate(tmp_path: Path):
     first = _unique_truck_dir(day, name, 1)
     first.mkdir()
     (first / "a.jpg").write_bytes(b"x")
+    (first / ".briefme_flow").write_text("flow-first\n", encoding="utf-8")
     second = _unique_truck_dir(day, name, 2)
     assert second.name == f"{name}_2"
     assert second != first
     assert (first / "a.jpg").is_file()
     print("collision keeps second truck separate OK")
+
+
+def test_unique_truck_dir_resume_high_index_reuses_canonical(tmp_path: Path):
+    day = tmp_path
+    day.mkdir(parents=True, exist_ok=True)
+    name = "2026-08-27_桂ND3699_重废1(80)"
+    first = _unique_truck_dir(day, name, 3)
+    first.mkdir()
+    (first / "a.jpg").write_bytes(b"x")
+    resumed = _unique_truck_dir(day, name, 3)
+    assert resumed.name == name
+    assert (resumed / "a.jpg").is_file()
+    assert not (day / f"{name}_3").exists()
+    print("resume high index reuses canonical OK")
 
 
 def test_parse_requested_dates_single_range_and_list():
@@ -267,6 +282,7 @@ if __name__ == "__main__":
         test_unique_truck_dir_renames_legacy_folder(_P(td) / "legacy")
         test_unique_truck_dir_canonical_without_daily_index(_P(td) / "canon")
         test_unique_truck_dir_collision_keeps_second_truck_separate(_P(td) / "collide")
+        test_unique_truck_dir_resume_high_index_reuses_canonical(_P(td) / "resume")
     test_parse_requested_dates_single_range_and_list()
     test_parse_save_path()
     print("\nAll shenglong download tests PASSED")

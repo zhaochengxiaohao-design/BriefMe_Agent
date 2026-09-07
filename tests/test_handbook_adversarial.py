@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from agent.core import _parse_save_path
 from agent.image_download_route import (
     is_ambiguous_multilabel_pack,
+    is_dual_plant_image_or_pack_request,
     is_shenglong_image_download,
     is_shenglong_multilabel_pack,
     is_yongfeng_image_download,
@@ -101,6 +102,7 @@ def test_same_plate_second_truck_stays_in_own_folder(tmp_path: Path):
     first = yf_unique(tmp_path, name, 1)
     first.mkdir()
     (first / "a.jpg").write_bytes(b"x")
+    (first / ".briefme_flow").write_text("flow-first\n", encoding="utf-8")
     yf_second = yf_unique(tmp_path, name, 2)
     sl_second = sl_unique(tmp_path, name, 2)
     assert yf_second.name == f"{name}_2"
@@ -298,6 +300,10 @@ def test_route_adversaries_handbook_examples():
     assert is_shenglong_image_download("MINIO图像下载")
     assert is_yongfeng_image_download("下载永锋 MINIO图像下载 2026-09-01")
     assert not is_shenglong_image_download("下载永锋 MINIO图像下载 2026-09-01")
+    both_legacy = "下载【永锋】【盛隆】3000网站图像下载"
+    assert is_dual_plant_image_or_pack_request(both_legacy)
+    assert not is_yongfeng_image_download(both_legacy)
+    assert not is_shenglong_image_download(both_legacy)
     assert not is_yongfeng_image_download("下载昨天打包带的异常图片")
     assert not is_yongfeng_image_download("下载永锋打包带异常图片")
     assert not is_yongfeng_image_download(

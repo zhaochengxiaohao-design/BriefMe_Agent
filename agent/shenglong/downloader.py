@@ -38,6 +38,8 @@ logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[int, int, str], None]
 
+_FLOW_MARK = ".briefme_flow"
+
 
 @dataclass
 class TruckDownloadResult:
@@ -139,6 +141,40 @@ def _download_image(client: ShenglongClient, url: str, dest: Path) -> int:
     return len(resp.content)
 
 
+def _read_flow_mark(truck_dir: Path) -> str:
+    try:
+        return (truck_dir / _FLOW_MARK).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def _write_flow_mark(truck_dir: Path, flow_code: str) -> None:
+    if not flow_code:
+        return
+    (truck_dir / _FLOW_MARK).write_text(flow_code + "\n", encoding="utf-8")
+
+
+def _find_dir_by_flow(day_dir: Path, flow_code: str) -> Optional[Path]:
+    if not flow_code or not day_dir.is_dir():
+        return None
+    for path in day_dir.iterdir():
+        if path.is_dir() and path.name != "datasets" and _read_flow_mark(path) == flow_code:
+            return path
+    return None
+
+
+def _try_rename_dir(src: Path, dest: Path) -> Path:
+    if src.resolve() == dest.resolve():
+        return dest
+    if dest.exists():
+        return src
+    try:
+        src.rename(dest)
+        return dest
+    except OSError:
+        return src
+
+
 def _unique_truck_dir(
     day_dir: Path,
     folder_name: str,
@@ -147,30 +183,24 @@ def _unique_truck_dir(
     legacy_name: str = "",
 ) -> Path:
     """手册规范名 YYYY-MM-DD_车牌_料型(...) 。
-    默认不加当日序号；仅当规范名已被另一辆车占用（daily_index>1）时用 _N，避免混车。
-    旧的单独 _N 目录续传时改回规范名。
+    默认不加当日序号。规范名已被另一辆车占用（有 flow 标记）时用 _N。
+    无标记的旧目录续传时仍回规范名，避免按列表序号拆出第二份。
     """
     candidate = day_dir / folder_name
     indexed = day_dir / f"{folder_name}_{daily_index}"
+    if indexed.exists() and not candidate.exists():
+        return _try_rename_dir(indexed, candidate)
     if candidate.exists():
         if daily_index <= 1:
             return candidate
-        return indexed
-    if indexed.exists():
-        try:
-            indexed.rename(candidate)
-            return candidate
-        except OSError:
+        if _read_flow_mark(candidate) or indexed.exists():
             return indexed
+        return candidate
     if legacy_name:
         for old_name in (legacy_name, f"{legacy_name}_{daily_index}"):
             old_path = day_dir / old_name
             if old_path.is_dir() and not candidate.exists():
-                try:
-                    old_path.rename(candidate)
-                    return candidate
-                except OSError:
-                    return old_path
+                return _try_rename_dir(old_path, candidate)
     return candidate
 
 
@@ -189,13 +219,21 @@ def download_truck_images(
     urls = extract_origin_image_urls(detail)
     folder_name = build_truck_folder_name(record.car_number, shares, date_str)
     legacy_name = build_truck_folder_stem(record.car_number, shares)
-    truck_dir = _unique_truck_dir(
-        output_root / date_str,
-        folder_name,
-        daily_index,
-        legacy_name=legacy_name,
-    )
+    day_dir = output_root / date_str
+    day_dir.mkdir(parents=True, exist_ok=True)
+    canonical = day_dir / folder_name
+    truck_dir = _find_dir_by_flow(day_dir, record.flow_code)
+    if truck_dir is None:
+        truck_dir = _unique_truck_dir(
+            day_dir,
+            folder_name,
+            daily_index,
+            legacy_name=legacy_name,
+        )
+    else:
+        truck_dir = _try_rename_dir(truck_dir, canonical)
     truck_dir.mkdir(parents=True, exist_ok=True)
+    _write_flow_mark(truck_dir, record.flow_code)
 
     result = TruckDownloadResult(
         flow_code=record.flow_code,
