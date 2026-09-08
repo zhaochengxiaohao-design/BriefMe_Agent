@@ -37,6 +37,8 @@ jobs:
 
     # 4. 运行自动化测试 (使用统一的 python 解释器调用 pytest)
     - name: Run tests (Forced Clean Environment)
+      env:
+        TENCENT_DOCS_AUTO_UPLOAD: "0"
       run: |
         # 1. 强行卸载可能被系统缓存的老旧幽灵包
         python -m pip uninstall -y agent Autoagent1 || true

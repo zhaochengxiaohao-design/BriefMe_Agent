@@ -5,11 +5,14 @@
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+os.environ["TENCENT_DOCS_AUTO_UPLOAD"] = "0"
 
 from agent.yongfeng.calculator import compute_accuracy
 from agent.yongfeng.excel_writer import write_report

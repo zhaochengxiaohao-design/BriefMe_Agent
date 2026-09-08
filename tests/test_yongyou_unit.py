@@ -9,7 +9,11 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+pytest.importorskip("playwright")
 
 from agent.yongyou.config import create_settings, DEFAULT_DOWNLOAD_DIR
 from agent.yongyou.page_actions import (
