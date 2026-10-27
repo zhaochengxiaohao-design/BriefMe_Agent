@@ -1,0 +1,4 @@
+interface:
+  display_name: "Graphing PPT Charts"
+  short_description: "分析工业汇报结构化数据并生成可编辑PPT原生图表页"
+  default_prompt: "Use $graphing-ppt-charts to analyze my table data, recommend the best editable PowerPoint chart, and generate a one-slide .pptx after I confirm the plan."

@@ -1,0 +1,56 @@
+name: CI Pipeline
+
+# 设置触发条件：当向 master 分支发起 PR 时运行
+on:
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: pip
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements.txt
+        python -m pip install flake8 pytest pytest-asyncio
+
+    - name: Verify Environment (Sanity Check)
+      run: |
+        echo "=== 检查当前解释器路径 ==="
+        python -c "import sys; print(sys.executable)"
+        echo "=== 检查核心库是否能被直接导入 ==="
+        python -c "import pptx; import sniffio; print('【成功】主环境依赖验证通过！')"
+
+    
+        
+    # 3. 代码质量检查 (可选，例如使用 flake8)
+    - name: Lint with flake8
+      run: |
+        pip install flake8
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        
+
+    # 4. 运行自动化测试 (使用统一的 python 解释器调用 pytest)
+    - name: Run tests (Forced Clean Environment)
+      env:
+        TENCENT_DOCS_AUTO_UPLOAD: "0"
+      run: |
+        # 1. 强行卸载可能被系统缓存的老旧幽灵包
+        python -m pip uninstall -y agent Autoagent1 || true
+        
+        # 2. 强迫 Python 认准当前网页上的最新代码
+        export PYTHONPATH=$GITHUB_WORKSPACE
+        
+        # 3. 补齐依赖
+        python -m pip install -r requirements.txt
+        python -m pip install pytest pytest-asyncio
+        
+        # 4. 以无缓存模式启动测试
+        python -m pytest --import-mode=importlib

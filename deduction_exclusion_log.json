@@ -1,0 +1,1402 @@
+[
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-10",
+    "carNumber": "湘A12345",
+    "stationNumber": 3,
+    "flowCode": "xxx",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.42,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-11",
+    "carNumber": "桂NB8882",
+    "stationNumber": 53,
+    "flowCode": "FLOW1781148826073736",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-11",
+    "carNumber": "桂P51966",
+    "stationNumber": 36,
+    "flowCode": "526840e0-6a52-4791-8051-5ca3e34f5bbc",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-11",
+    "carNumber": "桂ND5088",
+    "stationNumber": 53,
+    "flowCode": "FLOW1781140754381248",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.28,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-11",
+    "carNumber": "桂P59002",
+    "stationNumber": 36,
+    "flowCode": "FLOW1781141970856351",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-11",
+    "carNumber": "桂N9893",
+    "stationNumber": 36,
+    "flowCode": "FLOW1781135962136860",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.33499999999999996,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-11",
+    "carNumber": "桂KH6563",
+    "stationNumber": 53,
+    "flowCode": "FLOW1781135732798910",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.28,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-15",
+    "carNumber": "桂NB007",
+    "stationNumber": 53,
+    "flowCode": "FLOW1781507117773863",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-15",
+    "carNumber": "桂P52083",
+    "stationNumber": 53,
+    "flowCode": "5d466158-83ed-4139-9f22-fb5a5acba985",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-17",
+    "carNumber": "桂AN6830",
+    "stationNumber": 36,
+    "flowCode": "7ffd6d74-856c-4ad4-9e2b-531bf2f6be76",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-11",
+    "carNumber": "桂NB8882",
+    "stationNumber": 53,
+    "flowCode": "FLOW1781148826073736",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-15",
+    "carNumber": "桂P52083",
+    "stationNumber": 53,
+    "flowCode": "5d466158-83ed-4139-9f22-fb5a5acba985",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-17",
+    "carNumber": "桂AN6830",
+    "stationNumber": 36,
+    "flowCode": "7ffd6d74-856c-4ad4-9e2b-531bf2f6be76",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-18",
+    "carNumber": "桂BC1769",
+    "stationNumber": 36,
+    "flowCode": "6a58aa7f-c8c2-4a77-8016-0559f5f10bb4",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-11",
+    "carNumber": "桂NB8882",
+    "stationNumber": 53,
+    "flowCode": "FLOW1781148826073736",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-15",
+    "carNumber": "桂P52083",
+    "stationNumber": 53,
+    "flowCode": "5d466158-83ed-4139-9f22-fb5a5acba985",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-17",
+    "carNumber": "桂AN6830",
+    "stationNumber": 36,
+    "flowCode": "7ffd6d74-856c-4ad4-9e2b-531bf2f6be76",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-18",
+    "carNumber": "桂BC1769",
+    "stationNumber": 36,
+    "flowCode": "6a58aa7f-c8c2-4a77-8016-0559f5f10bb4",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂93900",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782292412348340",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂HT3752",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782268926031854",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.22333333333333336,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "赣CH6859",
+    "stationNumber": 53,
+    "flowCode": "6275fbde-8e03-4db1-a481-627a9b6f67ec",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.3666666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-11",
+    "carNumber": "桂NB8882",
+    "stationNumber": 53,
+    "flowCode": "FLOW1781148826073736",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-15",
+    "carNumber": "桂P52083",
+    "stationNumber": 53,
+    "flowCode": "5d466158-83ed-4139-9f22-fb5a5acba985",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-17",
+    "carNumber": "桂AN6830",
+    "stationNumber": 36,
+    "flowCode": "7ffd6d74-856c-4ad4-9e2b-531bf2f6be76",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-18",
+    "carNumber": "桂BC1769",
+    "stationNumber": 36,
+    "flowCode": "6a58aa7f-c8c2-4a77-8016-0559f5f10bb4",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂93900",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782292412348340",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂HT3752",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782268926031854",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.22333333333333336,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "赣CH6859",
+    "stationNumber": 53,
+    "flowCode": "6275fbde-8e03-4db1-a481-627a9b6f67ec",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.3666666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-11",
+    "carNumber": "桂NB8882",
+    "stationNumber": 53,
+    "flowCode": "FLOW1781148826073736",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-15",
+    "carNumber": "桂P52083",
+    "stationNumber": 53,
+    "flowCode": "5d466158-83ed-4139-9f22-fb5a5acba985",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-17",
+    "carNumber": "桂AN6830",
+    "stationNumber": 36,
+    "flowCode": "7ffd6d74-856c-4ad4-9e2b-531bf2f6be76",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-18",
+    "carNumber": "桂BC1769",
+    "stationNumber": 36,
+    "flowCode": "6a58aa7f-c8c2-4a77-8016-0559f5f10bb4",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂93900",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782292412348340",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂HT3752",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782268926031854",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.22333333333333336,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "赣CH6859",
+    "stationNumber": 53,
+    "flowCode": "6275fbde-8e03-4db1-a481-627a9b6f67ec",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.3666666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-11",
+    "carNumber": "桂NB8882",
+    "stationNumber": 53,
+    "flowCode": "FLOW1781148826073736",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-15",
+    "carNumber": "桂P52083",
+    "stationNumber": 53,
+    "flowCode": "5d466158-83ed-4139-9f22-fb5a5acba985",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-17",
+    "carNumber": "桂AN6830",
+    "stationNumber": 36,
+    "flowCode": "7ffd6d74-856c-4ad4-9e2b-531bf2f6be76",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-18",
+    "carNumber": "桂BC1769",
+    "stationNumber": 36,
+    "flowCode": "6a58aa7f-c8c2-4a77-8016-0559f5f10bb4",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂93900",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782292412348340",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂HT3752",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782268926031854",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.22333333333333336,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "赣CH6859",
+    "stationNumber": 53,
+    "flowCode": "6275fbde-8e03-4db1-a481-627a9b6f67ec",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.3666666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-11",
+    "carNumber": "桂NB8882",
+    "stationNumber": 53,
+    "flowCode": "FLOW1781148826073736",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-15",
+    "carNumber": "桂P52083",
+    "stationNumber": 53,
+    "flowCode": "5d466158-83ed-4139-9f22-fb5a5acba985",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-17",
+    "carNumber": "桂AN6830",
+    "stationNumber": 36,
+    "flowCode": "7ffd6d74-856c-4ad4-9e2b-531bf2f6be76",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-18",
+    "carNumber": "桂BC1769",
+    "stationNumber": 36,
+    "flowCode": "6a58aa7f-c8c2-4a77-8016-0559f5f10bb4",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂93900",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782292412348340",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂HT3752",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782268926031854",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.22333333333333336,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "赣CH6859",
+    "stationNumber": 53,
+    "flowCode": "6275fbde-8e03-4db1-a481-627a9b6f67ec",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.3666666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-11",
+    "carNumber": "桂NB8882",
+    "stationNumber": 53,
+    "flowCode": "FLOW1781148826073736",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-15",
+    "carNumber": "桂P52083",
+    "stationNumber": 53,
+    "flowCode": "5d466158-83ed-4139-9f22-fb5a5acba985",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-17",
+    "carNumber": "桂AN6830",
+    "stationNumber": 36,
+    "flowCode": "7ffd6d74-856c-4ad4-9e2b-531bf2f6be76",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-18",
+    "carNumber": "桂BC1769",
+    "stationNumber": 36,
+    "flowCode": "6a58aa7f-c8c2-4a77-8016-0559f5f10bb4",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂93900",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782292412348340",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂HT3752",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782268926031854",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.22333333333333336,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "赣CH6859",
+    "stationNumber": 53,
+    "flowCode": "6275fbde-8e03-4db1-a481-627a9b6f67ec",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.3666666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-11",
+    "carNumber": "桂NB8882",
+    "stationNumber": 53,
+    "flowCode": "FLOW1781148826073736",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-15",
+    "carNumber": "桂P52083",
+    "stationNumber": 53,
+    "flowCode": "5d466158-83ed-4139-9f22-fb5a5acba985",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-17",
+    "carNumber": "桂AN6830",
+    "stationNumber": 36,
+    "flowCode": "7ffd6d74-856c-4ad4-9e2b-531bf2f6be76",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-18",
+    "carNumber": "桂BC1769",
+    "stationNumber": 36,
+    "flowCode": "6a58aa7f-c8c2-4a77-8016-0559f5f10bb4",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂93900",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782292412348340",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂HT3752",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782268926031854",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.22333333333333336,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "赣CH6859",
+    "stationNumber": 53,
+    "flowCode": "6275fbde-8e03-4db1-a481-627a9b6f67ec",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.3666666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-18",
+    "carNumber": "桂BC1769",
+    "stationNumber": 36,
+    "flowCode": "6a58aa7f-c8c2-4a77-8016-0559f5f10bb4",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂93900",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782292412348340",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂HT3752",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782268926031854",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.22333333333333336,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-25",
+    "carNumber": "渝DR7397",
+    "stationNumber": 53,
+    "flowCode": "65409e2e-c113-470e-8a33-be96405373d7",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.44,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-25",
+    "carNumber": "豫EN0898",
+    "stationNumber": 53,
+    "flowCode": "729b601a-22bf-4e82-ae5d-8a5227c6cded",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24666666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-26",
+    "carNumber": "桂ND5623",
+    "stationNumber": 36,
+    "flowCode": "ba856e25-eb60-42a6-8275-5d3eba9a3f9d",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.42333333333333334,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-28",
+    "carNumber": "桂NC8991",
+    "stationNumber": 36,
+    "flowCode": "78ab8dc7-8b23-4b49-9521-d9857c522c09",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.29333333333333333,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-18",
+    "carNumber": "桂BC1769",
+    "stationNumber": 36,
+    "flowCode": "6a58aa7f-c8c2-4a77-8016-0559f5f10bb4",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂93900",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782292412348340",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-24",
+    "carNumber": "桂HT3752",
+    "stationNumber": 36,
+    "flowCode": "FLOW1782268926031854",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.22333333333333336,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-25",
+    "carNumber": "渝DR7397",
+    "stationNumber": 53,
+    "flowCode": "65409e2e-c113-470e-8a33-be96405373d7",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.44,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-25",
+    "carNumber": "豫EN0898",
+    "stationNumber": 53,
+    "flowCode": "729b601a-22bf-4e82-ae5d-8a5227c6cded",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24666666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-26",
+    "carNumber": "桂ND5623",
+    "stationNumber": 36,
+    "flowCode": "ba856e25-eb60-42a6-8275-5d3eba9a3f9d",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.42333333333333334,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-28",
+    "carNumber": "桂NC8991",
+    "stationNumber": 36,
+    "flowCode": "78ab8dc7-8b23-4b49-9521-d9857c522c09",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.29333333333333333,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-25",
+    "carNumber": "渝DR7397",
+    "stationNumber": 53,
+    "flowCode": "65409e2e-c113-470e-8a33-be96405373d7",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.44,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-25",
+    "carNumber": "豫EN0898",
+    "stationNumber": 53,
+    "flowCode": "729b601a-22bf-4e82-ae5d-8a5227c6cded",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24666666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-02",
+    "carNumber": "桂NC5877",
+    "stationNumber": 36,
+    "flowCode": "386ebb02-8022-4dae-ac39-30704fbc60f9",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.21333333333333335,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-03",
+    "carNumber": "云GA5012",
+    "stationNumber": 36,
+    "flowCode": "7113e07c-0864-4946-a77b-99fa6e39a35d",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.35000000000000003,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-08",
+    "carNumber": "桂FA2879",
+    "stationNumber": 36,
+    "flowCode": "FLOW1783477572343313",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.26666666666666666,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-08",
+    "carNumber": "桂P58855",
+    "stationNumber": 36,
+    "flowCode": "d2fa1b6b-d6b6-4b02-88ea-d9300291b2c4",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-25",
+    "carNumber": "渝DR7397",
+    "stationNumber": 53,
+    "flowCode": "65409e2e-c113-470e-8a33-be96405373d7",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.44,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-25",
+    "carNumber": "豫EN0898",
+    "stationNumber": 53,
+    "flowCode": "729b601a-22bf-4e82-ae5d-8a5227c6cded",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24666666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-26",
+    "carNumber": "桂ND5623",
+    "stationNumber": 36,
+    "flowCode": "ba856e25-eb60-42a6-8275-5d3eba9a3f9d",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.42333333333333334,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-06-28",
+    "carNumber": "桂NC8991",
+    "stationNumber": 36,
+    "flowCode": "78ab8dc7-8b23-4b49-9521-d9857c522c09",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.29333333333333333,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-02",
+    "carNumber": "桂NC5877",
+    "stationNumber": 36,
+    "flowCode": "386ebb02-8022-4dae-ac39-30704fbc60f9",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.21333333333333335,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-03",
+    "carNumber": "云GA5012",
+    "stationNumber": 36,
+    "flowCode": "7113e07c-0864-4946-a77b-99fa6e39a35d",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.35000000000000003,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-08",
+    "carNumber": "桂FA2879",
+    "stationNumber": 36,
+    "flowCode": "FLOW1783477572343313",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.26666666666666666,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-08",
+    "carNumber": "桂P58855",
+    "stationNumber": 36,
+    "flowCode": "d2fa1b6b-d6b6-4b02-88ea-d9300291b2c4",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-08",
+    "carNumber": "桂P58855",
+    "stationNumber": 36,
+    "flowCode": "d2fa1b6b-d6b6-4b02-88ea-d9300291b2c4",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-09",
+    "carNumber": "桂A00505",
+    "stationNumber": 36,
+    "flowCode": "FLOW1783581531448489",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.35,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-10",
+    "carNumber": "桂FB7937",
+    "stationNumber": 53,
+    "flowCode": "FLOW1783671090535944",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-11",
+    "carNumber": "桂DY9128",
+    "stationNumber": 53,
+    "flowCode": "FLOW1783752867968750",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.28,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-13",
+    "carNumber": "豫NC1051",
+    "stationNumber": 53,
+    "flowCode": "8eb77184-d041-4fb2-89b0-6dc570851d72",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 2.283333333333333,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-14",
+    "carNumber": "桂AY0335",
+    "stationNumber": 53,
+    "flowCode": "bdf14e12-9861-4930-901a-a0a55f16d291",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-15",
+    "carNumber": "桂UMAN",
+    "stationNumber": 53,
+    "flowCode": "FLOW1784096831680405",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-09",
+    "carNumber": "桂A00505",
+    "stationNumber": 36,
+    "flowCode": "FLOW1783581531448489",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.35,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-10",
+    "carNumber": "桂FB7937",
+    "stationNumber": 53,
+    "flowCode": "FLOW1783671090535944",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-11",
+    "carNumber": "桂DY9128",
+    "stationNumber": 53,
+    "flowCode": "FLOW1783752867968750",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.28,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-13",
+    "carNumber": "豫NC1051",
+    "stationNumber": 53,
+    "flowCode": "8eb77184-d041-4fb2-89b0-6dc570851d72",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 2.283333333333333,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-14",
+    "carNumber": "桂AY0335",
+    "stationNumber": 53,
+    "flowCode": "bdf14e12-9861-4930-901a-a0a55f16d291",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-15",
+    "carNumber": "桂UMAN",
+    "stationNumber": 53,
+    "flowCode": "FLOW1784096831680405",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-16",
+    "carNumber": "桂EN0898",
+    "stationNumber": 53,
+    "flowCode": "FLOW1784184537467527",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.3566666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-16",
+    "carNumber": "桂NA6139",
+    "stationNumber": 53,
+    "flowCode": "551a2f14-7e37-43d5-a1b9-476ffc9a0f36",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.29000000000000004,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-21",
+    "carNumber": "桂ES0095",
+    "stationNumber": 53,
+    "flowCode": "FLOW178463223420850",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.21333333333333335,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-22",
+    "carNumber": "桂N92062",
+    "stationNumber": 53,
+    "flowCode": "2f08abeb-8cfd-4a11-9521-a66d38cd1f29",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.45,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-09",
+    "carNumber": "桂A00505",
+    "stationNumber": 36,
+    "flowCode": "FLOW1783581531448489",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.35,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-10",
+    "carNumber": "桂FB7937",
+    "stationNumber": 53,
+    "flowCode": "FLOW1783671090535944",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.24,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-11",
+    "carNumber": "桂DY9128",
+    "stationNumber": 53,
+    "flowCode": "FLOW1783752867968750",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.28,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-13",
+    "carNumber": "豫NC1051",
+    "stationNumber": 53,
+    "flowCode": "8eb77184-d041-4fb2-89b0-6dc570851d72",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 2.283333333333333,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-14",
+    "carNumber": "桂AY0335",
+    "stationNumber": 53,
+    "flowCode": "bdf14e12-9861-4930-901a-a0a55f16d291",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-15",
+    "carNumber": "桂UMAN",
+    "stationNumber": 53,
+    "flowCode": "FLOW1784096831680405",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-16",
+    "carNumber": "桂EN0898",
+    "stationNumber": 53,
+    "flowCode": "FLOW1784184537467527",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.3566666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-16",
+    "carNumber": "桂NA6139",
+    "stationNumber": 53,
+    "flowCode": "551a2f14-7e37-43d5-a1b9-476ffc9a0f36",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.29000000000000004,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-21",
+    "carNumber": "桂ES0095",
+    "stationNumber": 53,
+    "flowCode": "FLOW178463223420850",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.21333333333333335,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-22",
+    "carNumber": "桂N92062",
+    "stationNumber": 53,
+    "flowCode": "2f08abeb-8cfd-4a11-9521-a66d38cd1f29",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.45,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-16",
+    "carNumber": "桂EN0898",
+    "stationNumber": 53,
+    "flowCode": "FLOW1784184537467527",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.3566666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-16",
+    "carNumber": "桂NA6139",
+    "stationNumber": 53,
+    "flowCode": "551a2f14-7e37-43d5-a1b9-476ffc9a0f36",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.29000000000000004,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-21",
+    "carNumber": "桂ES0095",
+    "stationNumber": 53,
+    "flowCode": "FLOW178463223420850",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.21333333333333335,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-22",
+    "carNumber": "桂N92062",
+    "stationNumber": 53,
+    "flowCode": "2f08abeb-8cfd-4a11-9521-a66d38cd1f29",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.45,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-15",
+    "carNumber": "桂UMAN",
+    "stationNumber": 53,
+    "flowCode": "FLOW1784096831680405",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-16",
+    "carNumber": "桂EN0898",
+    "stationNumber": 53,
+    "flowCode": "FLOW1784184537467527",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.3566666666666667,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-16",
+    "carNumber": "桂NA6139",
+    "stationNumber": 53,
+    "flowCode": "551a2f14-7e37-43d5-a1b9-476ffc9a0f36",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.29000000000000004,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-21",
+    "carNumber": "桂ES0095",
+    "stationNumber": 53,
+    "flowCode": "FLOW178463223420850",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.21333333333333335,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-22",
+    "carNumber": "桂N92062",
+    "stationNumber": 53,
+    "flowCode": "2f08abeb-8cfd-4a11-9521-a66d38cd1f29",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.45,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-23",
+    "carNumber": "桂ABN288",
+    "stationNumber": 53,
+    "flowCode": "b274670b-1cdf-45da-84e1-9aa43ef2c484",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.42500000000000004,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-23",
+    "carNumber": "桂NB8829",
+    "stationNumber": 36,
+    "flowCode": "e14daad8-7cc9-4f0d-9e11-ecf00c23f962",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-23",
+    "carNumber": "桂ABN288",
+    "stationNumber": 53,
+    "flowCode": "b274670b-1cdf-45da-84e1-9aa43ef2c484",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.42500000000000004,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-07-23",
+    "carNumber": "桂NB8829",
+    "stationNumber": 36,
+    "flowCode": "e14daad8-7cc9-4f0d-9e11-ecf00c23f962",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-08-03",
+    "carNumber": "桂ABQ166",
+    "stationNumber": 36,
+    "flowCode": "3c733f47-a868-4261-a8af-aaca75eb3735",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.37,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-08-03",
+    "carNumber": "桂P81859",
+    "stationNumber": "36/53",
+    "flowCode": "00cc4045-5bb1-484d-8673-38504a73864a",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.4,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-08-05",
+    "carNumber": "桂ADF815",
+    "stationNumber": 36,
+    "flowCode": "bec43744-b3d2-4404-9056-4ca31a2fb881",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.29000000000000004,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-08-09",
+    "carNumber": "桂EV7967电电",
+    "stationNumber": 36,
+    "flowCode": "FLOW1786259263008576",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.16499999999999998,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-08-09",
+    "carNumber": "桂APR0DUT0FF",
+    "stationNumber": 36,
+    "flowCode": "FLOW178625158960690",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.4,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-08-10",
+    "carNumber": "桂MB2271",
+    "stationNumber": "36/36",
+    "flowCode": "3403f5d3-d864-4647-b6ce-c72509d8f6fa",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.295,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-08-10",
+    "carNumber": "桂FF8501",
+    "stationNumber": 53,
+    "flowCode": "6200acdd-f836-474c-aa20-6cf9a34001c8",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": null,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-08-11",
+    "carNumber": "桂P05600",
+    "stationNumber": 36,
+    "flowCode": "896ed9ef-4487-4c06-9187-6914cd3312b3",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.25,
+    "reason": "ai_total_deduct_weight_is_zero"
+  },
+  {
+    "event": "exclude_deduction_vehicle",
+    "date": "2026-08-12",
+    "carNumber": "桂P82230",
+    "stationNumber": 36,
+    "flowCode": "ce440c59-6901-4090-a6ea-0e522fbe62dd",
+    "aiTotalDeductWeight": 0,
+    "manualDeductTon": 0.34,
+    "reason": "ai_total_deduct_weight_is_zero"
+  }
+]
