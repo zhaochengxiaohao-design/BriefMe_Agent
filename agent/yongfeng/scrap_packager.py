@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+import shutil
 import zipfile
 from collections import defaultdict
 from pathlib import Path
@@ -15,6 +16,8 @@ logger = logging.getLogger(__name__)
 INSTANCE_SUFFIX = "实例分割数据集"
 EDGE_SUFFIX = "边缘分割数据集"
 CLASSIFICATION_NAME = "废钢分类数据集"
+# 与分类包内容相同，供平台「永锋废钢杂质分割」入口导入
+IMPURITY_NAME = "废钢杂质数据集"
 MULTILABEL_NAME = "废钢多标签分类数据集"
 _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 _DAY_DIR_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -105,7 +108,7 @@ def pack_day_datasets(
     day_dir: Path,
     trucks: Iterable[dict],
 ) -> list[Path]:
-    """一天下完后打两类包：按主料型的实例/边缘分割包，以及不分料型的废钢分类数据集。"""
+    """一天下完后打三类包：废钢分类、同内容的废钢杂质副本，以及按主料型的实例/边缘分割包。"""
     groups: dict[str, list[Path]] = defaultdict(list)
     all_files: list[Path] = []
     for truck in trucks:
@@ -130,9 +133,11 @@ def pack_day_datasets(
     for pattern in (f"*{INSTANCE_SUFFIX}.zip", f"*{EDGE_SUFFIX}.zip"):
         for stale in datasets_dir.glob(pattern):
             stale.unlink(missing_ok=True)
-    created: list[Path] = [
-        write_images_zip(datasets_dir / f"{CLASSIFICATION_NAME}.zip", all_files)
-    ]
+    cls_zip = write_images_zip(datasets_dir / f"{CLASSIFICATION_NAME}.zip", all_files)
+    impurity_zip = datasets_dir / f"{IMPURITY_NAME}.zip"
+    shutil.copy2(cls_zip, impurity_zip)
+    logger.info("已复制 %s → %s", cls_zip.name, impurity_zip.name)
+    created: list[Path] = [cls_zip, impurity_zip]
     for stem, files in groups.items():
         for suffix in (INSTANCE_SUFFIX, EDGE_SUFFIX):
             created.append(write_images_zip(datasets_dir / f"{stem}_{suffix}.zip", files))

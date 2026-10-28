@@ -13,12 +13,30 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import gradio as gr
 import httpx
+from starlette import status as _starlette_status
+
+# Gradio 6.x 每次入队都会读 Starlette 已弃用的 HTTP_422_UNPROCESSABLE_ENTITY，
+# 终端刷 StarletteDeprecationWarning，用户易当成上传报错。
+# 在模块上写入同值新常量，避免走 __getattr__ 弃用分支；并过滤残留警告。
+_starlette_status.HTTP_422_UNPROCESSABLE_ENTITY = (
+    _starlette_status.HTTP_422_UNPROCESSABLE_CONTENT
+)
+try:
+    from starlette.exceptions import StarletteDeprecationWarning as _StarletteDeprecationWarning
+except ImportError:  # pragma: no cover
+    _StarletteDeprecationWarning = UserWarning  # type: ignore[misc, assignment]
+warnings.filterwarnings(
+    "ignore",
+    message=".*HTTP_422_UNPROCESSABLE_ENTITY.*",
+    category=_StarletteDeprecationWarning,
+)
 
 from agent.core import SteelCoilAgent, _parse_save_path
 from agent.image_download_route import (
@@ -48,7 +66,7 @@ from agent.yongfeng.scrap_align import (
     uploaded_to_path,
 )
 from agent.yongfeng.scrap_packager import pack_multilabel_from_disk as pack_yongfeng_multilabel
-from agent.yongfeng.scrap_uploader import upload_zips_for_dates
+from agent.yongfeng.scrap_uploader import iter_upload_zips_for_dates
 from config.settings import settings
 
 logging.basicConfig(
@@ -952,26 +970,34 @@ def build_ui() -> gr.Blocks:
             })
             yield history, session, xlsx, pptx, imgs, None
 
+            # 编排仍一次传入全部日期（跨日入口锁 + 统一重试）；
+            # 聊天版式与旧版一致：开场白 + 逐日【日期】块 + 全部日期处理完成。
             lines = [history[-1]["content"]]
-            totals = {"uploaded": 0, "skipped": 0, "failed": 0}
             try:
-                for date in dates:
-                    result = upload_zips_for_dates(dest, dates=[date])
-                    totals["uploaded"] += int(result.get("uploaded") or 0)
-                    totals["skipped"] += int(result.get("skipped") or 0)
-                    totals["failed"] += int(result.get("failed") or 0)
-                    lines.append(f"\n【{date}】")
-                    lines.extend(result.get("lines") or [])
-                    history[-1]["content"] = "\n".join(lines[-80:])
-                    xlsx, pptx, imgs = _scan_latest_artifacts()
-                    yield history, session, xlsx, pptx, imgs, None
-                lines.append(
-                    f"\n全部日期处理完成：成功 {totals['uploaded']} 个，"
-                    f"跳过 {totals['skipped']} 个，失败 {totals['failed']} 个。"
-                )
-                history[-1]["content"] = "\n".join(lines[-80:])
-                xlsx, pptx, imgs = _scan_latest_artifacts()
-                yield history, session, xlsx, pptx, imgs, None
+                for event in iter_upload_zips_for_dates(dest, dates=dates):
+                    if event.get("type") == "day":
+                        day_report = event.get("day_report") or {}
+                        day = day_report.get("day") or ""
+                        lines.append(f"\n【{day}】")
+                        lines.extend(day_report.get("lines") or [])
+                        history[-1]["content"] = "\n".join(lines[-80:])
+                        xlsx, pptx, imgs = _scan_latest_artifacts()
+                        yield history, session, xlsx, pptx, imgs, None
+                    elif event.get("type") == "done":
+                        result = event.get("result") or {}
+                        # 用最终态（含统一重试结果）重写逐日块，避免留下首轮 ⏳
+                        lines = [lines[0]]
+                        for day in result.get("days") or []:
+                            lines.append(f"\n【{day.get('day')}】")
+                            lines.extend(day.get("lines") or [])
+                        lines.append(
+                            f"\n全部日期处理完成：成功 {int(result.get('uploaded') or 0)} 个，"
+                            f"跳过 {int(result.get('skipped') or 0)} 个，"
+                            f"失败 {int(result.get('failed') or 0)} 个。"
+                        )
+                        history[-1]["content"] = "\n".join(lines[-80:])
+                        xlsx, pptx, imgs = _scan_latest_artifacts()
+                        yield history, session, xlsx, pptx, imgs, None
             except Exception as exc:
                 lines.append(f"❌ 上传中断：{exc}")
                 history[-1]["content"] = "\n".join(lines[-80:])

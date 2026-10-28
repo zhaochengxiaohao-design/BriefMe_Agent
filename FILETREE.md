@@ -2,7 +2,7 @@
 
 > 多场景工业智能决策助手（Gradio Web UI + LLM 路由 + 多钢铁厂业务链路）
 > 本文件为项目结构的"地图"，帮助快速定位代码；由人工维护，目录有大变动时请同步更新。
-> 生成日期：2026-10-27
+> 生成日期：2026-10-28
 
 ```text
 BriefMe_Agent/
@@ -84,7 +84,7 @@ BriefMe_Agent/
 │   │   ├── scrap_naming.py
 │   │   ├── scrap_packager.py
 │   │   ├── scrap_remote_sync.py
-│   │   ├── scrap_uploader.py          #   datasets/ zip 上传金睛平台（登录→搜索→MinIO直传→导入任务）
+│   │   ├── scrap_uploader.py          #   datasets/ zip→金睛（含杂质入口 28392）；STS/两轮重试/防重
 │   │   └── output/                    #   准确率报表 JSON 中间结果（运行时生成）
 │   │       ├── accuracy_report_computed.json
 │   │       └── accuracy_report_raw.json

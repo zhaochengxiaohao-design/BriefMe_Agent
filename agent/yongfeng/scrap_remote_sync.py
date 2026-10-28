@@ -60,10 +60,24 @@ def _scp_base(cfg: YongfengScrapConfig) -> list[str]:
     ]
 
 
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+
+
+def _dir_has_images(truck_dir: Path) -> bool:
+    """空车次（只有 .briefme_flow、图全 404）不必 scp，避免白等 SSH 超时。"""
+    try:
+        for path in truck_dir.iterdir():
+            if path.is_file() and path.suffix.lower() in _IMAGE_EXTS and path.stat().st_size > 0:
+                return True
+    except OSError:
+        return False
+    return False
+
+
 def _truck_dirs(day_dir: Path) -> list[Path]:
     return sorted(
         p for p in day_dir.iterdir()
-        if p.is_dir() and p.name != "datasets"
+        if p.is_dir() and p.name != "datasets" and _dir_has_images(p)
     )
 
 

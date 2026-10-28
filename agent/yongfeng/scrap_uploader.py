@@ -17,6 +17,7 @@
 
 命名规则（用户定稿，zip 前缀能对上就行）：
   废钢分类数据集.zip          → 永锋-废钢分类
+  废钢杂质数据集.zip          → 永锋废钢杂质分割（固定 id，默认 28392）
   重废1_实例分割数据集.zip    → 永锋-重废1
   重废1_边缘分割数据集.zip    → 同料型只上传一个，与实例分割内容相同则跳过
   平均料型_实例分割数据集.zip → 平台没有「永锋-平均料型」，跳过并报告
@@ -24,18 +25,19 @@
 程序显式建导入任务（手动导入）。单条失败不中断，全部进总结。
 
 防重与监督：
-- 平台不去重（重复导入会叠图）：每次成功导入记进
-  <日期>/datasets/uploaded.txt，重跑时已成功的 zip 自动跳过
-- MinIO 直传有概率卡死：超过 upload_timeout（默认 5 分钟）就终止该
-  上传，先传其他 zip，全部传完后统一重试一次
-- 程序标记失败时同步终止平台上的任务
-  （POST devel/dataset-jobs/<id>/stop/，幂等），避免同入口冲突
+- 平台不去重（重复导入会叠图）：成功记进 <日期>/datasets/uploaded.txt
+  （按文件名）；建任务后写 upload_pending.txt，超时中断下次可重查补记
+- MinIO 直传卡死：超过 upload_timeout（默认 5 分钟）终止该条并统一重试
+- 重试轮只终止本程序管辖入口（「永锋-」前缀 + 杂质入口）上、自己建的任务
+- 空 / 损坏 zip、平均料型包在计划阶段跳过
+- 登录与 API 对 5xx/网络抖动有限次退避重试
 """
 from __future__ import annotations
 
 import logging
 import threading
 import time
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -48,13 +50,28 @@ logger = logging.getLogger(__name__)
 
 # 本地打包命名（见 scrap_packager.py）
 CLASSIFICATION_ZIP_NAME = "废钢分类数据集.zip"
+IMPURITY_ZIP_NAME = "废钢杂质数据集.zip"
 INSTANCE_SUFFIX = "_实例分割数据集.zip"
 EDGE_SUFFIX = "_边缘分割数据集.zip"
 AVERAGE_PREFIX = "平均料型"
 # 平台导入页限制：单文件最大 10GB
 MAX_ZIP_BYTES = 10 * 1024**3
 # 成功导入记录（平台不去重，重复导入会叠图；靠本地记录避免重复）
+# 每个 <日期>/datasets/ 各自一份，按 zip 文件名去重。
 RECORD_FILE_NAME = "uploaded.txt"
+# 已建导入任务、尚未确认成功的本地登记（防超时后重跑叠图）
+PENDING_FILE_NAME = "upload_pending.txt"
+
+
+def _managed_entry(dataset_name: str) -> bool:
+    """是否属于本功能管辖的永锋数据集入口（仅这些入口允许 stop）。"""
+    if not dataset_name:
+        return False
+    prefix = (settings.yongfeng_upload.dataset_name_prefix or "永锋-").strip()
+    if dataset_name.startswith(prefix):
+        return True
+    impurity = (settings.yongfeng_upload.impurity_dataset_name or "").strip()
+    return bool(impurity) and dataset_name == impurity
 
 
 def _load_uploaded_names(datasets_dir: Path) -> set:
@@ -92,6 +109,107 @@ def _record_success(zip_path: Path, dataset_name: str, job_id: Optional[int]) ->
             f.write(line + "\n")
     except OSError as exc:
         logger.warning("写入上传记录 %s 失败: %s", record, exc)
+    _clear_pending_zip(zip_path)
+
+
+def _load_pending(datasets_dir: Path) -> Dict[str, Dict[str, Any]]:
+    """读 upload_pending.txt → {zip文件名: {dataset_name, job_id, dataset_id}}。"""
+    record = datasets_dir / PENDING_FILE_NAME
+    if not record.is_file():
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+    try:
+        for line in record.read_text(encoding="utf-8").splitlines():
+            parts = [p.strip() for p in line.split("\t")]
+            if len(parts) < 3 or not parts[0]:
+                continue
+            try:
+                job_id = int(parts[2].replace("任务", "").strip())
+            except ValueError:
+                continue
+            dataset_id = None
+            if len(parts) >= 4 and parts[3].isdigit():
+                dataset_id = int(parts[3])
+            out[parts[0]] = {
+                "dataset_name": parts[1],
+                "job_id": job_id,
+                "dataset_id": dataset_id,
+            }
+    except OSError as exc:
+        logger.warning("读取待确认记录 %s 失败: %s", record, exc)
+    return out
+
+
+def _record_pending(
+    zip_path: Path,
+    dataset_name: str,
+    job_id: int,
+    dataset_id: Optional[int],
+) -> None:
+    """建导入任务后立刻登记，等确认成功再清掉。"""
+    _clear_pending_zip(zip_path)
+    record = zip_path.parent / PENDING_FILE_NAME
+    line = "\t".join(
+        [
+            zip_path.name,
+            dataset_name,
+            str(job_id),
+            str(dataset_id if dataset_id is not None else ""),
+            time.strftime("%Y-%m-%d %H:%M:%S"),
+        ]
+    )
+    try:
+        with record.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError as exc:
+        logger.warning("写入待确认记录 %s 失败: %s", record, exc)
+
+
+def _clear_pending_zip(zip_path: Path) -> None:
+    """从 upload_pending.txt 去掉该 zip 的行。"""
+    record = zip_path.parent / PENDING_FILE_NAME
+    if not record.is_file():
+        return
+    try:
+        lines = record.read_text(encoding="utf-8").splitlines()
+        kept = [ln for ln in lines if not ln.startswith(zip_path.name + "\t")]
+        if kept:
+            record.write_text("\n".join(kept) + "\n", encoding="utf-8")
+        else:
+            record.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("清理待确认记录 %s 失败: %s", record, exc)
+
+
+def _reconcile_pending(
+    client: AthenaClient,
+    datasets_dir: Path,
+) -> tuple[set, set]:
+    """对照平台重查上一轮未确认的任务。
+
+    返回 (已补记成功的 zip 名集合, 仍在跑的 zip 名集合)。
+    仍在跑的不要再传；已成功的写入 uploaded.txt；已失败的清 pending 允许重传。
+    """
+    pending = _load_pending(datasets_dir)
+    confirmed: set = set()
+    still_running: set = set()
+    for zip_name, info in pending.items():
+        job_id = int(info["job_id"])
+        try:
+            status = client.get_job_status(job_id).get("status")
+        except Exception as exc:  # noqa: BLE001 查不到就留着下次再问
+            logger.warning("重查待确认任务 %s 失败: %s", job_id, exc)
+            still_running.add(zip_name)
+            continue
+        zip_path = datasets_dir / zip_name
+        if status == 3:
+            _record_success(zip_path, str(info.get("dataset_name") or ""), job_id)
+            confirmed.add(zip_name)
+        elif status == 2:
+            still_running.add(zip_name)
+        else:
+            _clear_pending_zip(zip_path)
+    return confirmed, still_running
 
 
 class YongfengUploadError(Exception):
@@ -109,12 +227,16 @@ class EntryBusyError(YongfengUploadError):
         self.job_id = int(job_id)
 
 
-def _run_with_deadline(fn, timeout: float, label: str) -> None:
+def _run_with_deadline(
+    fn,
+    timeout: float,
+    label: str,
+    abort: Optional[threading.Event] = None,
+) -> None:
     """在守护线程里执行 fn，主线程最多等 timeout 秒（超时监督）。
 
-    用于 MinIO 直传这类有概率卡死的调用：超过 timeout 秒没有结果就
-    抛 YongfengUploadError 终止该次调用（守护线程放弃，不阻塞进程），
-    由上层暂存到最后统一重试；fn 自身抛错则原样转抛。
+    超时后置位 abort，让直传 Callback / 短 read_timeout 尽快结束工作线程，
+    避免主流程已放弃后后台仍长时间占着带宽。
     """
     done = threading.Event()
     errors: List[BaseException] = []
@@ -131,6 +253,10 @@ def _run_with_deadline(fn, timeout: float, label: str) -> None:
     worker.start()
     # +1 秒余量：让 fn 内部的墙钟回调先有机会触发
     if not done.wait(timeout + 1.0):
+        if abort is not None:
+            abort.set()
+        # 再等一小会，让 Callback / socket 超时把工作线程收掉
+        done.wait(3.0)
         raise YongfengUploadError(
             f"{label} 超过 {timeout:.0f} 秒无结果，终止该上传（先传其他，最后统一重试）"
         )
@@ -229,6 +355,7 @@ def parse_zip_prefix(zip_name: str) -> Optional[str]:
     """zip 文件名 → 目标数据集的「永锋-」后缀前缀。
 
     废钢分类数据集.zip → 废钢分类
+    废钢杂质数据集.zip → None（由 plan_day_zips 单独映射到固定入口）
     重废1_实例分割数据集.zip → 重废1
     统料Ⅰ_实例分割数据集.zip → 统料1（全角罗马数字归一化为半角）
     重废1_边缘分割数据集.zip → 重废1
@@ -237,6 +364,8 @@ def parse_zip_prefix(zip_name: str) -> Optional[str]:
     name = zip_name.strip()
     if name == CLASSIFICATION_ZIP_NAME:
         return "废钢分类"
+    if name == IMPURITY_ZIP_NAME:
+        return None
     for suffix in (INSTANCE_SUFFIX, EDGE_SUFFIX):
         if name.endswith(suffix):
             prefix = name[: -len(suffix)]
@@ -245,17 +374,43 @@ def parse_zip_prefix(zip_name: str) -> Optional[str]:
     return None
 
 
+def _zip_skip_reason(zip_path: Path) -> Optional[str]:
+    """空文件或损坏/非 zip → 跳过原因；可用则返回 None。"""
+    try:
+        size = zip_path.stat().st_size
+    except OSError:
+        return "无法读取文件，跳过"
+    if size <= 0:
+        return "空 zip（0 字节），跳过"
+    if not zipfile.is_zipfile(zip_path):
+        return "不是合法 zip（损坏或伪后缀），跳过"
+    return None
+
+
 def plan_day_zips(datasets_dir: Path) -> List[ZipPlan]:
     """扫描 <日期>/datasets/ 下的 zip，生成上传计划。
 
     同料型的实例分割包和边缘分割包内容相同，只上传一个
     （优先实例分割包，没有实例分割包才用边缘分割包兜底）。
+    废钢杂质数据集.zip 单独映射到平台「永锋废钢杂质分割」。
     """
     if not datasets_dir.is_dir():
         return []
     groups: Dict[str, List[Path]] = {}
     plans: List[ZipPlan] = []
     for zip_path in sorted(datasets_dir.glob("*.zip")):
+        bad = _zip_skip_reason(zip_path)
+        if bad:
+            plans.append(ZipPlan(zip_path, skip=True, reason=bad))
+            continue
+        if zip_path.name == IMPURITY_ZIP_NAME:
+            plans.append(
+                ZipPlan(
+                    zip_path,
+                    dataset_name=settings.yongfeng_upload.impurity_dataset_name,
+                )
+            )
+            continue
         prefix = parse_zip_prefix(zip_path.name)
         if prefix is None:
             plans.append(
@@ -263,6 +418,16 @@ def plan_day_zips(datasets_dir: Path) -> List[ZipPlan]:
                     zip_path,
                     skip=True,
                     reason="不是 datasets 打包命名，未上传",
+                )
+            )
+            continue
+        if prefix == AVERAGE_PREFIX:
+            plans.append(
+                ZipPlan(
+                    zip_path,
+                    dataset_name=f"{settings.yongfeng_upload.dataset_name_prefix}{prefix}",
+                    skip=True,
+                    reason="平台没有平均料型数据集，跳过",
                 )
             )
             continue
@@ -300,21 +465,41 @@ class AthenaClient:
 
     def login(self) -> str:
         url = f"{self.cfg.base_url}/api/auth/login/"
-        resp = self._session.post(
-            url,
-            json={"username": self.cfg.username, "password": self.cfg.password},
-            timeout=self.cfg.login_timeout,
-        )
-        resp.raise_for_status()
-        body = resp.json()
-        if body.get("code") != 0:
-            raise YongfengUploadError(f"平台登录失败: {body.get('message')}")
-        token = (body.get("data") or {}).get("access") or ""
-        if not token:
-            raise YongfengUploadError("平台登录响应缺少 access token")
-        self._token = token
-        logger.info("金睛平台登录成功（%s）", self.cfg.username)
-        return token
+        last_exc: Optional[BaseException] = None
+        for attempt in range(1, 7):
+            try:
+                resp = self._session.post(
+                    url,
+                    json={"username": self.cfg.username, "password": self.cfg.password},
+                    timeout=self.cfg.login_timeout,
+                )
+                if resp.status_code in (502, 503, 504):
+                    raise requests.HTTPError(
+                        f"{resp.status_code} Server Error", response=resp
+                    )
+                resp.raise_for_status()
+                body = resp.json()
+                if body.get("code") != 0:
+                    raise YongfengUploadError(f"平台登录失败: {body.get('message')}")
+                token = (body.get("data") or {}).get("access") or ""
+                if not token:
+                    raise YongfengUploadError("平台登录响应缺少 access token")
+                self._token = token
+                logger.info("金睛平台登录成功（%s）", self.cfg.username)
+                return token
+            except (requests.HTTPError, requests.ConnectionError, requests.Timeout) as exc:
+                last_exc = exc
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                if status not in (502, 503, 504) and not isinstance(
+                    exc, (requests.ConnectionError, requests.Timeout)
+                ):
+                    raise
+                wait = min(60.0, 2.0 ** attempt)
+                logger.warning(
+                    "平台登录暂不可用（%s），%.0fs 后重试 %d/6", exc, wait, attempt
+                )
+                time.sleep(wait)
+        raise YongfengUploadError(f"平台登录多次重试仍失败: {last_exc}")
 
     def _headers(self) -> Dict[str, str]:
         if not self._token:
@@ -334,29 +519,55 @@ class AthenaClient:
         params: Optional[Dict[str, Any]] = None,
         payload: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """带 401 自动重登的 API 请求，返回响应 JSON。"""
+        """带 401 自动重登 + 5xx/网络抖动退避重试的 API 请求。"""
         url = f"{self.cfg.base_url}/api/{path.lstrip('/')}"
-        for attempt in (1, 2):
-            resp = self._session.request(
-                method,
-                url,
-                params=params,
-                json=payload,
-                headers=self._headers(),
-                timeout=self.cfg.request_timeout,
-            )
-            if resp.status_code == 401 and attempt == 1:
-                logger.info("平台 token 过期，重新登录")
-                self._token = ""
-                continue
-            resp.raise_for_status()
-            body = resp.json()
-            if body.get("code") != 0:
-                raise YongfengUploadError(
-                    f"平台接口 {path} 返回异常: {body.get('message')}"
+        auth_retried = False
+        last_exc: Optional[BaseException] = None
+        for attempt in range(1, 8):
+            try:
+                resp = self._session.request(
+                    method,
+                    url,
+                    params=params,
+                    json=payload,
+                    headers=self._headers(),
+                    timeout=self.cfg.request_timeout,
                 )
-            return body
-        raise YongfengUploadError(f"平台接口 {path} 重新登录后仍 401")
+                if resp.status_code == 401 and not auth_retried:
+                    logger.info("平台 token 过期，重新登录")
+                    self._token = ""
+                    auth_retried = True
+                    continue
+                if resp.status_code in (502, 503, 504):
+                    raise requests.HTTPError(
+                        f"{resp.status_code} Server Error for url: {resp.url}",
+                        response=resp,
+                    )
+                resp.raise_for_status()
+                body = resp.json()
+                if body.get("code") != 0:
+                    raise YongfengUploadError(
+                        f"平台接口 {path} 返回异常: {body.get('message')}"
+                    )
+                return body
+            except (requests.HTTPError, requests.ConnectionError, requests.Timeout) as exc:
+                last_exc = exc
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                retryable = status in (502, 503, 504) or isinstance(
+                    exc, (requests.ConnectionError, requests.Timeout)
+                )
+                if not retryable:
+                    raise
+                wait = min(60.0, 2.0 ** attempt)
+                logger.warning(
+                    "平台接口 %s 暂不可用（%s），%.0fs 后重试 %d/7",
+                    path,
+                    exc,
+                    wait,
+                    attempt,
+                )
+                time.sleep(wait)
+        raise YongfengUploadError(f"平台接口 {path} 多次重试仍失败: {last_exc}")
 
     # ---------- 业务步骤 ----------
 
@@ -417,18 +628,21 @@ class AthenaClient:
         """用 STS 临时密钥把 zip 直传 MinIO（AWS SigV4），带超时监督。
 
         直传有概率卡死：超过 cfg.upload_timeout（默认 5 分钟）就终止该
-        上传（先传其他 zip，最后统一重试）。回调里再挂一道墙钟保险，
-        双保险覆盖「有进度但太慢」和「完全卡死」两种情况。
+        上传（先传其他 zip，最后统一重试）。abort 事件 + 短 read_timeout +
+        Callback 墙钟，尽量让工作线程在主流程放弃后尽快停下来。
         """
         import boto3
         from botocore.client import Config
 
         timeout = float(self.cfg.upload_timeout)
         deadline = time.monotonic() + timeout
+        abort = threading.Event()
+        # HTTP 读超时压到监督上限附近，避免主线程已超时后台还卡 30 分钟
+        read_timeout = max(30.0, min(float(self.cfg.minio_timeout), timeout + 30.0))
 
         def _upload() -> None:
-            def _guard(bytes_sent: int) -> None:
-                if time.monotonic() > deadline:
+            def _guard(_bytes_sent: int) -> None:
+                if abort.is_set() or time.monotonic() > deadline:
                     raise YongfengUploadError(
                         f"zip 直传超过 {timeout:.0f} 秒，终止该上传（先传其他，最后统一重试）"
                     )
@@ -444,7 +658,7 @@ class AthenaClient:
                     signature_version="s3v4",
                     s3={"addressing_style": "path"},
                     connect_timeout=30,
-                    read_timeout=self.cfg.minio_timeout,
+                    read_timeout=read_timeout,
                     retries={"max_attempts": 2},
                 ),
             )
@@ -455,7 +669,9 @@ class AthenaClient:
                 Callback=_guard,
             )
 
-        _run_with_deadline(_upload, timeout, f"minio-put:{zip_path.name}")
+        _run_with_deadline(
+            _upload, timeout, f"minio-put:{zip_path.name}", abort=abort
+        )
         logger.info("zip 已直传 MinIO: %s/%s/%s", signature["bucket"], signature["key"], zip_path.name)
 
     def stop_job(self, dataset_id: int, job_id: int) -> None:
@@ -520,7 +736,15 @@ def upload_one_zip(plan: ZipPlan, client: AthenaClient) -> UploadItem:
         item.status = "failed"
         item.message = f"zip {size / 1024**3:.1f}GB 超过平台 10GB 上限"
         return item
-    dataset_id = client.search_dataset_id(plan.dataset_name)
+    cfg = settings.yongfeng_upload
+    # 杂质入口平台名不含「永锋-」前缀，用配置的固定 id，避免搜名失败
+    if (
+        plan.dataset_name == cfg.impurity_dataset_name
+        and cfg.impurity_dataset_id
+    ):
+        dataset_id = cfg.impurity_dataset_id
+    else:
+        dataset_id = client.search_dataset_id(plan.dataset_name)
     if dataset_id is None:
         item.status = "skipped"
         item.message = f"平台上没有数据集「{plan.dataset_name}」（按名称搜索无精确匹配），未上传"
@@ -536,9 +760,11 @@ def upload_one_zip(plan: ZipPlan, client: AthenaClient) -> UploadItem:
     client.put_zip_to_minio(signature, zip_path)
     job_id = client.create_import_job(dataset_id, key)
     item.job_id = job_id
+    # 建任务后立刻落 pending：即便 wait 超时/进程中断，下次也能重查避免叠图
+    _record_pending(zip_path, plan.dataset_name, job_id, dataset_id)
     try:
         client.wait_job(job_id)
-    except Exception as exc:  # noqa: BLE001 导入未确认完成，保留 job_id 供入口锁
+    except Exception as exc:  # noqa: BLE001 导入未确认完成，保留 pending + job_id
         item.status = "failed"
         item.message = str(exc)
         return item
@@ -569,8 +795,10 @@ def upload_day_zips(
     deferred = deferred if deferred is not None else []
     datasets_dir = day_dir / "datasets"
     plans = plan_day_zips(datasets_dir)
+    # 上一轮超时未确认的任务：先问平台，成功则补记 uploaded.txt
+    confirmed, still_running = _reconcile_pending(client, datasets_dir)
     # 已成功导入的 zip（uploaded.txt）：平台不去重，重跑时跳过
-    uploaded_names = _load_uploaded_names(datasets_dir)
+    uploaded_names = _load_uploaded_names(datasets_dir) | confirmed
     items: List[UploadItem] = []
     for plan in plans:
         if plan.skip:
@@ -592,6 +820,22 @@ def upload_day_zips(
                     message=(
                         f"已成功导入过（{RECORD_FILE_NAME} 有记录），跳过；"
                         "平台不去重，避免重复叠图"
+                    ),
+                )
+            )
+            continue
+        if plan.zip_path.name in still_running:
+            pending_info = _load_pending(datasets_dir).get(plan.zip_path.name) or {}
+            job_id = pending_info.get("job_id")
+            items.append(
+                UploadItem(
+                    zip=str(plan.zip_path),
+                    dataset_name=plan.dataset_name,
+                    job_id=job_id,
+                    status="skipped",
+                    message=(
+                        f"平台任务 {job_id} 仍在导入中（{PENDING_FILE_NAME}），"
+                        "本轮不重复上传，稍后重发指令即可"
                     ),
                 )
             )
@@ -618,6 +862,8 @@ def upload_day_zips(
             item = upload_one_zip(plan, client)
         except EntryBusyError as exc:
             logger.warning("上传 %s 首轮入口被占: %s", plan.zip_path.name, exc)
+            # 与「自己超时」一样锁入口，避免同日/跨日再次撞上
+            blocked[plan.dataset_name] = exc.job_id
             items.append(
                 UploadItem(
                     zip=str(plan.zip_path),
@@ -641,20 +887,20 @@ def upload_day_zips(
             deferred.append(PendingRetry(plan, reason=str(exc)))
             continue
         if item.status == "failed":
-            # 导入任务未确认完成（超时/失败）时平台上可能还在跑，
-            # 锁住入口，防止后续同入口的 zip 把它顶掉。
             if item.job_id:
+                # 导入任务未确认完成（超时等）：平台上可能还在跑，锁入口并暂存重试
                 blocked[item.dataset_name] = item.job_id
-            deferred.append(
-                PendingRetry(
-                    plan,
-                    reason=item.message,
-                    blocking_job_id=item.job_id,
-                    own_job=True,
+                deferred.append(
+                    PendingRetry(
+                        plan,
+                        reason=item.message,
+                        blocking_job_id=item.job_id,
+                        own_job=True,
+                    )
                 )
-            )
-            item.status = "retry_pending"
-            item.message = f"首轮失败（{item.message}），最后统一重试"
+                item.status = "retry_pending"
+                item.message = f"首轮失败（{item.message}），最后统一重试"
+            # 无 job_id 的失败（如超 10GB）重试无意义，保持 failed
         items.append(item)
     report = UploadReport(items=items, days=[day_dir.name])
     return {
@@ -690,18 +936,39 @@ def _discover_dataset_dates(output_dir: Path) -> List[str]:
     return dates
 
 
+def _wait_job_not_running(
+    client: AthenaClient,
+    job_id: Optional[int],
+    *,
+    attempts: int = 5,
+    interval: float = 1.0,
+) -> None:
+    """stop 之后短轮询，直到任务不再是 status=2（或查不到/次数用尽）。"""
+    if not job_id:
+        return
+    for _ in range(max(1, attempts)):
+        try:
+            status = client.get_job_status(job_id).get("status")
+        except Exception:  # noqa: BLE001 查失败就当已空闲，交给后续 find_running
+            return
+        if status != 2:
+            return
+        time.sleep(interval)
+
+
 def _stop_platform_job(
     client: AthenaClient,
     dataset_name: str,
     dataset_id: Optional[int],
     job_id: Optional[int],
+    *,
+    own_job: bool = False,
 ) -> bool:
-    """程序标记失败时，同步终止平台上的对应任务，避免同入口冲突。
+    """仅终止「本功能管辖的永锋入口 + 本程序自己建的任务」。
 
-    尽力而为：终止失败只记日志，不影响总结；没有任务号则跳过。
-    dataset_id 缺失时按名称现查一次。
+    别人会话留下的任务、非永锋-入口一律不动。
     """
-    if not job_id:
+    if not job_id or not own_job or not _managed_entry(dataset_name):
         return False
     try:
         if dataset_id is None:
@@ -722,9 +989,9 @@ def _retry_deferred(
 ) -> List[UploadItem]:
     """最后统一重试首轮没传上的 zip（每条只重试一次）。
 
-    重试前先重查占用入口的任务：仍在跑就不抢入口（避免中断）；
-    自己的任务其实已经成功，则直接记成功，不必重传。重试仍失败
-    的，顺手把平台上的任务终止掉，避免下一轮指令和它冲突。
+    - 自己的任务已成功 → 补记成功，不重传
+    - 自己的任务仍在跑 → 只对永锋管辖入口 stop，再重传
+    - 别人的任务仍在跑 → 不 stop，本轮失败，请用户稍后再发
     """
     retry_items: List[UploadItem] = []
     for pend in deferred:
@@ -732,20 +999,7 @@ def _retry_deferred(
         try:
             if pend.blocking_job_id:
                 status = client.get_job_status(pend.blocking_job_id).get("status")
-                if status == 2:
-                    stopped = _stop_platform_job(
-                        client, pend.plan.dataset_name, None, pend.blocking_job_id
-                    )
-                    item.status = "failed"
-                    item.job_id = pend.blocking_job_id
-                    item.message = (
-                        f"重试时平台上任务 {pend.blocking_job_id} 仍在运行，本轮不抢入口"
-                        f"{'，已终止平台任务' if stopped else ''}，请稍后重发指令补传"
-                    )
-                    retry_items.append(item)
-                    continue
                 if status == 3 and pend.own_job:
-                    # 首轮超时的任务其实已经导入成功
                     item.status = "uploaded"
                     item.job_id = pend.blocking_job_id
                     item.message = "首轮超时的任务重查确认已导入成功"
@@ -754,27 +1008,49 @@ def _retry_deferred(
                     )
                     retry_items.append(item)
                     continue
-                # 任务已结束（成功/失败）→ 入口空闲，重新上传
+                if status == 2:
+                    if pend.own_job and _managed_entry(pend.plan.dataset_name):
+                        # 自己的任务还在跑：停掉管辖入口上的任务，再重传
+                        _stop_platform_job(
+                            client,
+                            pend.plan.dataset_name,
+                            None,
+                            pend.blocking_job_id,
+                            own_job=True,
+                        )
+                        # stop 后平台状态可能短暂仍为 2，稍等再传，避免立刻 EntryBusy
+                        _wait_job_not_running(client, pend.blocking_job_id, attempts=5)
+                        # fall through → upload_one_zip
+                    else:
+                        item.status = "failed"
+                        item.job_id = pend.blocking_job_id
+                        item.message = (
+                            f"重试时平台上任务 {pend.blocking_job_id} 仍在运行，"
+                            "本轮不抢入口（未终止他人任务），请稍后重发指令补传"
+                        )
+                        retry_items.append(item)
+                        continue
+                # 任务已结束（成功但非 own / 失败）→ 入口空闲，重新上传
             retry_item = upload_one_zip(pend.plan, client)
             if retry_item.status == "uploaded":
                 retry_item.message = "重试导入成功"
             else:
                 if retry_item.job_id:
-                    # 重试后导入任务仍未确认完成：终止平台任务，避免下一轮冲突
                     stopped = _stop_platform_job(
                         client,
                         pend.plan.dataset_name,
                         retry_item.dataset_id,
                         retry_item.job_id,
+                        own_job=True,
                     )
                     if stopped:
-                        retry_item.message += "，已终止平台任务"
+                        retry_item.message += "，已终止本入口平台任务"
                 retry_item.message = f"重试仍失败：{retry_item.message}"
             retry_items.append(retry_item)
         except EntryBusyError as exc:
-            stopped = _stop_platform_job(client, pend.plan.dataset_name, None, exc.job_id)
+            # 他人任务占入口：绝不 stop
             item.status = "failed"
-            item.message = f"重试仍失败：{exc}{'，已终止平台任务' if stopped else ''}"
+            item.message = f"重试仍失败：{exc}（未终止他人任务）"
             retry_items.append(item)
         except Exception as exc:  # noqa: BLE001 重试失败即最终失败
             logger.warning("重试上传 %s 失败: %s", pend.plan.zip_path.name, exc)
@@ -784,102 +1060,114 @@ def _retry_deferred(
     return retry_items
 
 
-def _retry_lines(retry_items: List[UploadItem]) -> List[str]:
-    lines: List[str] = []
+def _format_item_line(it: UploadItem) -> str:
+    name = Path(it.zip).name
+    if it.status == "uploaded":
+        return f"- {name} → {it.dataset_name}（任务 {it.job_id}，{it.message or '导入成功'}）"
+    if it.status == "skipped":
+        return f"- {name} → ⏭️ {it.message}"
+    if it.status == "retry_pending":
+        return f"- {name} → ⏳ {it.message}"
+    return f"- {name} → ❌ {it.message}"
+
+
+def _merge_final_items(
+    main_items: List[UploadItem],
+    retry_items: List[UploadItem],
+) -> List[UploadItem]:
+    """用重试结果覆盖首轮 retry_pending，得到最终状态列表（去重总结）。"""
+    by_zip: Dict[str, UploadItem] = {}
+    for it in main_items:
+        by_zip[it.zip] = it
     for it in retry_items:
-        rel = Path(it.zip)
-        day = rel.parent.parent.name
-        name = rel.name
-        if it.status == "uploaded":
-            lines.append(f"- {day}/{name} → {it.dataset_name}（任务 {it.job_id}，{it.message}）")
-        elif it.status == "skipped":
-            lines.append(f"- {day}/{name} → ⏭️ {it.message}")
-        else:
-            lines.append(f"- {day}/{name} → ❌ {it.message}")
-    return lines
+        by_zip[it.zip] = it
+    return list(by_zip.values())
 
 
-def upload_zips_for_dates(
-    output_dir: str,
-    dates: Optional[List[str]] = None,
-    client: Optional[AthenaClient] = None,
+def _build_upload_result(
+    root: Path,
+    dates: List[str],
+    main_items: List[UploadItem],
+    retry_items: List[UploadItem],
+    missing_dates: Optional[set] = None,
 ) -> Dict[str, Any]:
-    """上传多个日期的 datasets/ zip。dates 缺省时扫目录下全部日期。
+    """汇总最终态：按日 lines + 与旧版 Gradio 一致的总结措辞。"""
+    missing_dates = set(missing_dates or ())
+    final_items = _merge_final_items(main_items, retry_items)
+    uploaded = sum(1 for it in final_items if it.status == "uploaded")
+    skipped = sum(1 for it in final_items if it.status == "skipped") + len(missing_dates)
+    failed = sum(1 for it in final_items if it.status == "failed")
 
-    两轮制（平台约束：同一数据集入口一次只能上传/导入一个包）：
-    第一轮按日期逐个传，传不上的先暂存（入口被占 / 网络失败 / 任务
-    超时），不打断其他入口；全部日期传完后，统一重试暂存的每一条；
-    重试仍失败才计为失败写进总结。
-    """
-    client = client or AthenaClient()
-    root = Path(output_dir).expanduser()
-    if not dates:
-        dates = _discover_dataset_dates(root)
-    if not dates:
-        raise YongfengUploadError(
-            f"{output_dir} 下没有找到含 datasets/ 的日期目录"
-        )
-    day_reports: List[Dict[str, Any]] = []
-    main_items: List[UploadItem] = []
-    # 入口名 → 未完成任务 id（首轮导入超时未确认完成的入口）
-    blocked_datasets: Dict[str, int] = {}
-    deferred: List[PendingRetry] = []
+    by_day: Dict[str, List[UploadItem]] = {}
+    for it in final_items:
+        path = Path(it.zip)
+        day = path.parent.parent.name if path.parent.name == "datasets" else path.parent.name
+        by_day.setdefault(day, []).append(it)
+
+    final_day_reports: List[Dict[str, Any]] = []
+    lines: List[str] = []
     for date in dates:
-        day_dir = root / date
-        if not (day_dir / "datasets").is_dir():
-            main_items.append(
-                UploadItem(
-                    zip=str(day_dir / "datasets"),
-                    status="skipped",
-                    message=f"目录 {day_dir}/datasets 不存在，跳过",
-                )
+        if date in missing_dates:
+            day_lines = [f"- ⏭️ 目录 {date}/datasets 不存在，跳过"]
+            day_items: List[UploadItem] = []
+        else:
+            day_items = by_day.get(date) or []
+            day_lines = (
+                [_format_item_line(it) for it in day_items]
+                if day_items
+                else [f"- ⏭️ 目录 {date}/datasets 不存在，跳过"]
             )
-            day_reports.append(
-                {"day": date, "items": [], "lines": [f"- ⏭️ 目录 {date}/datasets 不存在，跳过"]}
-            )
-            continue
-        day_report = upload_day_zips(
-            day_dir, client=client, blocked_datasets=blocked_datasets, deferred=deferred
+        final_day_reports.append(
+            {
+                "day": date,
+                "items": [
+                    {
+                        "zip": it.zip,
+                        "dataset_name": it.dataset_name,
+                        "dataset_id": it.dataset_id,
+                        "job_id": it.job_id,
+                        "status": it.status,
+                        "message": it.message,
+                    }
+                    for it in day_items
+                ],
+                "lines": day_lines,
+            }
         )
-        day_reports.append(day_report)
-        for it in day_report["items"]:
-            main_items.append(
-                UploadItem(
-                    zip=it["zip"],
-                    dataset_name=it["dataset_name"],
-                    dataset_id=it["dataset_id"],
-                    job_id=it["job_id"],
-                    status=it["status"],
-                    message=it["message"],
-                )
-            )
+        lines.append(f"【{date}】")
+        lines.extend(day_lines)
+    for day, day_items in by_day.items():
+        if day in dates:
+            continue
+        day_lines = [_format_item_line(it) for it in day_items]
+        final_day_reports.append(
+            {
+                "day": day,
+                "items": [
+                    {
+                        "zip": it.zip,
+                        "dataset_name": it.dataset_name,
+                        "dataset_id": it.dataset_id,
+                        "job_id": it.job_id,
+                        "status": it.status,
+                        "message": it.message,
+                    }
+                    for it in day_items
+                ],
+                "lines": day_lines,
+            }
+        )
+        lines.append(f"【{day}】")
+        lines.extend(day_lines)
 
-    # ===== 第二轮：统一重试 =====
-    retry_items = _retry_deferred(deferred, client) if deferred else []
-
-    uploaded = sum(1 for it in main_items if it.status == "uploaded") + sum(
-        1 for it in retry_items if it.status == "uploaded"
-    )
-    skipped = sum(1 for it in main_items if it.status == "skipped") + sum(
-        1 for it in retry_items if it.status == "skipped"
-    )
-    failed = sum(1 for it in retry_items if it.status == "failed")
-
-    lines = ["✅ 永锋数据集上传完成（金睛平台 pre-athena-mv）"]
-    for day_report in day_reports:
-        if day_report.get("lines"):
-            lines.append(f"【{day_report.get('day')}】")
-            lines.extend(day_report["lines"])
-    if retry_items:
-        lines.append("【统一重试】")
-        lines.extend(_retry_lines(retry_items))
+    # 与旧版 Gradio 收尾句一致（工具路径的 summary_text 也用这句）
     lines.append(
-        f"合计：成功 {uploaded} 个，跳过 {skipped} 个，失败 {failed} 个"
+        f"全部日期处理完成：成功 {uploaded} 个，跳过 {skipped} 个，失败 {failed} 个。"
     )
     return {
         "output_dir": str(root),
         "dates": dates,
-        "days": day_reports,
+        "days": final_day_reports,
         "uploaded": uploaded,
         "skipped": skipped,
         "failed": failed,
@@ -897,6 +1185,83 @@ def upload_zips_for_dates(
         "lines": lines,
         "summary_text": "\n".join(lines),
     }
+
+
+def iter_upload_zips_for_dates(
+    output_dir: str,
+    dates: Optional[List[str]] = None,
+    client: Optional[AthenaClient] = None,
+):
+    """上传编排生成器：每完成一天首轮 yield day 事件，最后 yield done。
+
+    跨日共用入口锁 + 统一重试；供 Gradio 逐日刷聊天，工具路径用
+    upload_zips_for_dates 取最终结果即可。
+    """
+    client = client or AthenaClient()
+    root = Path(output_dir).expanduser()
+    if not dates:
+        dates = _discover_dataset_dates(root)
+    if not dates:
+        raise YongfengUploadError(
+            f"{output_dir} 下没有找到含 datasets/ 的日期目录"
+        )
+    main_items: List[UploadItem] = []
+    missing_dates: set = set()
+    blocked_datasets: Dict[str, int] = {}
+    deferred: List[PendingRetry] = []
+    for date in dates:
+        day_dir = root / date
+        if not (day_dir / "datasets").is_dir():
+            missing_dates.add(date)
+            day_report = {
+                "day": date,
+                "items": [],
+                "lines": [f"- ⏭️ 目录 {date}/datasets 不存在，跳过"],
+            }
+            yield {"type": "day", "day_report": day_report}
+            continue
+        day_report = upload_day_zips(
+            day_dir, client=client, blocked_datasets=blocked_datasets, deferred=deferred
+        )
+        for it in day_report["items"]:
+            main_items.append(
+                UploadItem(
+                    zip=it["zip"],
+                    dataset_name=it["dataset_name"],
+                    dataset_id=it["dataset_id"],
+                    job_id=it["job_id"],
+                    status=it["status"],
+                    message=it["message"],
+                )
+            )
+        yield {"type": "day", "day_report": day_report}
+
+    retry_items = _retry_deferred(deferred, client) if deferred else []
+    result = _build_upload_result(
+        root, dates, main_items, retry_items, missing_dates=missing_dates
+    )
+    yield {"type": "done", "result": result}
+
+
+def upload_zips_for_dates(
+    output_dir: str,
+    dates: Optional[List[str]] = None,
+    client: Optional[AthenaClient] = None,
+) -> Dict[str, Any]:
+    """上传多个日期的 datasets/ zip。dates 缺省时扫目录下全部日期。
+
+    两轮制（平台约束：同一数据集入口一次只能上传/导入一个包）：
+    第一轮按日期逐个传，传不上的先暂存（入口被占 / 网络失败 / 任务
+    超时），不打断其他入口；全部日期传完后，统一重试暂存的每一条；
+    重试仍失败才计为失败写进总结。
+    """
+    result: Optional[Dict[str, Any]] = None
+    for event in iter_upload_zips_for_dates(output_dir, dates=dates, client=client):
+        if event.get("type") == "done":
+            result = event["result"]
+    if result is None:
+        raise YongfengUploadError("上传未返回结果")
+    return result
 
 
 def format_upload_summary(result: Dict[str, Any]) -> str:

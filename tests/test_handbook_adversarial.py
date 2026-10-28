@@ -210,6 +210,7 @@ def test_auto_pack_never_writes_multilabel(tmp_path: Path):
     zips = pack_day_datasets(tmp_path, [{"files": [img], "shares": shares}])
     names = {p.name for p in zips}
     assert "废钢分类数据集.zip" in names
+    assert "废钢杂质数据集.zip" in names
     assert any("实例分割数据集.zip" in n for n in names)
     assert any("边缘分割数据集.zip" in n for n in names)
     assert f"{MULTILABEL_NAME}.zip" not in names

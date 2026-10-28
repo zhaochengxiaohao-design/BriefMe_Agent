@@ -166,6 +166,7 @@ def _legacy_station_token(station_number) -> str:
 
 
 def _download_image(client: YongfengScrapClient, url: str, dest: Path) -> int:
+    """下载单张原图。仅 401/403 或网络中断才重登；404 等业务错误直接失败。"""
     dest.parent.mkdir(parents=True, exist_ok=True)
     last_err: Exception | None = None
     for attempt in range(2):
@@ -177,6 +178,8 @@ def _download_image(client: YongfengScrapClient, url: str, dest: Path) -> int:
                 logger.warning("永锋原图鉴权失败，重登后重试")
                 client.login()
                 continue
+            if resp.status_code == 404:
+                raise RuntimeError(f"原图不存在（HTTP 404）: {url}")
             resp.raise_for_status()
             payload = resp.content
             if not _looks_like_image(payload):
@@ -190,6 +193,10 @@ def _download_image(client: YongfengScrapClient, url: str, dest: Path) -> int:
             raise
         except Exception as exc:  # noqa: BLE001
             last_err = exc
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            # 4xx（除鉴权）是对象本身的问题，重登无意义
+            if status is not None and 400 <= int(status) < 500 and int(status) not in (401, 403):
+                raise
             if attempt == 0:
                 logger.warning("永锋原图下载中断，重登后重试: %s", exc)
                 try:
@@ -370,7 +377,8 @@ def download_truck_images(
             _download_image(client, url, dest)
             result.saved_files.append(dest)
         except Exception as exc:  # noqa: BLE001
-            logger.exception("永锋下载失败 %s -> %s", url, exc)
+            # 404 / 坏链很常见，只记一行警告，不要 exception 堆栈刷屏
+            logger.warning("永锋下载失败 %s -> %s", url, exc)
             result.failed_files.append((url, str(exc)))
     return result
 
@@ -459,6 +467,9 @@ def iter_download_images(
 
     day_results: list[DayDownloadResult] = []
     zip_paths: list[str] = []
+    # 远程 SSH 一旦确认不可达，本轮后续日期不再白等 ConnectTimeout
+    skip_remote_sync = False
+    skip_remote_reason = ""
 
     with YongfengScrapClient() as client:
         for cur in day_list:
@@ -526,11 +537,37 @@ def iter_download_images(
                 )
                 yield {"type": "progress", "message": msg}
 
-            try:
-                sync = sync_date_folder(output_root / cur)
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("永锋 scp 同步异常，已跳过: %s", exc)
-                sync = SyncResult(ok=False, skipped=False, error=str(exc))
+            if skip_remote_sync:
+                sync = SyncResult(
+                    ok=True,
+                    skipped=True,
+                    error=skip_remote_reason or "远程不可达，已跳过",
+                    remote_path="",
+                )
+            else:
+                try:
+                    sync = sync_date_folder(output_root / cur)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("永锋 scp 同步异常，已跳过: %s", exc)
+                    sync = SyncResult(ok=False, skipped=False, error=str(exc))
+                err_l = (sync.error or "").lower()
+                if (
+                    not sync.ok
+                    and not sync.skipped
+                    and any(
+                        token in err_l
+                        for token in (
+                            "timed out",
+                            "timeout",
+                            "connection refused",
+                            "no route to host",
+                            "network is unreachable",
+                            "could not resolve",
+                        )
+                    )
+                ):
+                    skip_remote_sync = True
+                    skip_remote_reason = f"远程不可达（{sync.error}），后续日期跳过 scp"
             day.scp_ok = sync.ok
             day.scp_skipped = sync.skipped
             day.scp_error = sync.error
@@ -538,12 +575,16 @@ def iter_download_images(
             if sync.skipped:
                 if "未配置" in (sync.error or ""):
                     scp_msg = f"{cur} 未配置远程同步，跳过 scp"
+                elif "远程不可达" in (sync.error or ""):
+                    scp_msg = f"{cur} {sync.error}"
                 else:
                     scp_msg = f"{cur} 没有可同步的车次文件夹，跳过 scp"
             elif sync.ok:
                 scp_msg = f"{cur} 已原样 scp 到 {sync.remote_path}"
             else:
                 scp_msg = f"{cur} scp 失败（已跳过，下载继续）: {sync.error}"
+                if skip_remote_sync and skip_remote_reason:
+                    scp_msg = f"{scp_msg}；{skip_remote_reason}"
             writer.event(scp_msg, current_date=cur)
             yield {
                 "type": "day_scp",
@@ -581,7 +622,8 @@ def iter_download_images(
     yield {
         "type": "done",
         "message": (
-            "下载完成。已自动打好「废钢分类数据集」，并按主料型打好实例分割和边缘分割包。"
+            "下载完成。已自动打好「废钢分类数据集」及其副本「废钢杂质数据集」，"
+            "并按主料型打好实例分割和边缘分割包。"
             "不再另打「废钢多标签分类数据集」。"
         ),
         "result": summary,

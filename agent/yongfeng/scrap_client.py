@@ -55,6 +55,21 @@ class YongfengScrapClient:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close()
 
+    def _cookie_value(self, name: str) -> str:
+        """读取 Cookie；同名多条时取最后一条，避免 CookieConflictError。"""
+        matches = [c.value for c in self.session.cookies if c.name == name]
+        if not matches:
+            return ""
+        return str(matches[-1] or "").strip()
+
+    def _set_auth_cookie(self, token: str) -> None:
+        """只保留一条 satoken，防止重复登录后 jar 里同名冲突。"""
+        name = self.cfg.cookie_name
+        for cookie in list(self.session.cookies):
+            if cookie.name == name:
+                self.session.cookies.clear(cookie.domain, cookie.path, cookie.name)
+        self.session.cookies.set(name, token)
+
     def login(self) -> None:
         last_err: Exception | None = None
         for attempt in range(1, LOGIN_RETRIES + 1):
@@ -71,10 +86,12 @@ class YongfengScrapClient:
                 body = resp.json()
                 if not (body.get("meta") or {}).get("success"):
                     raise RuntimeError(f"永锋登录失败: {body}")
-                self.token = _token_from_login(body, self.session.cookies.get(self.cfg.cookie_name))
+                self.token = _token_from_login(
+                    body, self._cookie_value(self.cfg.cookie_name)
+                )
                 if not self.token:
                     raise RuntimeError("永锋登录成功但未返回 token / satoken")
-                self.session.cookies.set(self.cfg.cookie_name, self.token)
+                self._set_auth_cookie(self.token)
                 logger.info("永锋废钢系统登录成功 token=%s…", self.token[:8])
                 return
             except Exception as exc:  # noqa: BLE001

@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from agent.image_download_route import is_yongfeng_dataset_upload
 from agent.yongfeng.scrap_uploader import (
     CLASSIFICATION_ZIP_NAME,
+    IMPURITY_ZIP_NAME,
     INSTANCE_SUFFIX,
     YongfengUploadError,
     AthenaClient,
@@ -27,14 +28,20 @@ from config.settings import settings
 
 
 def _mkzip(directory: Path, name: str) -> Path:
+    import zipfile
+
     directory.mkdir(parents=True, exist_ok=True)
     p = directory / name
-    p.write_bytes(b"PK\x05\x06")  # 空zip签名占位，测试只看文件名
+    # 合法空 zip（仅 EOCD），测试只看文件名 / 编排，不依赖内容
+    with zipfile.ZipFile(p, "w"):
+        pass
     return p
 
 
 def test_parse_zip_prefix():
     assert parse_zip_prefix("废钢分类数据集.zip") == "废钢分类"
+    # 杂质包由 plan_day_zips 单独映射，不走「永锋-」前缀
+    assert parse_zip_prefix("废钢杂质数据集.zip") is None
     assert parse_zip_prefix("重废1_实例分割数据集.zip") == "重废1"
     assert parse_zip_prefix("重废1_边缘分割数据集.zip") == "重废1"
     assert parse_zip_prefix("统料_实例分割数据集.zip") == "统料"
@@ -56,10 +63,11 @@ def test_plan_day_zips_dedup_prefers_instance():
         _mkzip(datasets, "重废1_边缘分割数据集.zip")
         _mkzip(datasets, "重废1_实例分割数据集.zip")
         _mkzip(datasets, "废钢分类数据集.zip")
+        _mkzip(datasets, "废钢杂质数据集.zip")
         _mkzip(datasets, "平均料型_实例分割数据集.zip")
         plans = plan_day_zips(datasets)
         by_name = {p.zip_path.name: p for p in plans}
-        assert len(plans) == 4
+        assert len(plans) == 5
         # 实例分割优先上传
         chosen = by_name["重废1_实例分割数据集.zip"]
         assert not chosen.skip
@@ -71,9 +79,13 @@ def test_plan_day_zips_dedup_prefers_instance():
         # 分类固定映射
         cls = by_name[CLASSIFICATION_ZIP_NAME]
         assert not cls.skip and cls.dataset_name == "永锋-废钢分类"
-        # 平均料型仍进计划，由搜索结果决定跳过
+        # 杂质：固定平台入口（不含「永锋-」前缀）
+        impurity = by_name[IMPURITY_ZIP_NAME]
+        assert not impurity.skip
+        assert impurity.dataset_name == settings.yongfeng_upload.impurity_dataset_name
+        # 平均料型：平台没有对应入口，计划阶段直接跳过
         avg = by_name["平均料型_实例分割数据集.zip"]
-        assert not avg.skip and avg.dataset_name == "永锋-平均料型"
+        assert avg.skip and "平均料型" in avg.reason
     print("plan_day_zips dedup OK")
 
 
@@ -102,6 +114,23 @@ def test_plan_day_zips_ignores_non_zip_and_unknown_names():
     print("plan_day_zips ignore non-zip OK")
 
 
+def test_plan_day_zips_skips_empty_and_corrupt():
+    with tempfile.TemporaryDirectory() as td:
+        datasets = Path(td) / "d" / "datasets"
+        datasets.mkdir(parents=True)
+        empty = datasets / "统料_实例分割数据集.zip"
+        empty.write_bytes(b"")
+        corrupt = datasets / "重废1_实例分割数据集.zip"
+        corrupt.write_bytes(b"not-a-zip")
+        ok = _mkzip(datasets, "废钢分类数据集.zip")
+        plans = plan_day_zips(datasets)
+        by_name = {p.zip_path.name: p for p in plans}
+        assert by_name[empty.name].skip and "空 zip" in by_name[empty.name].reason
+        assert by_name[corrupt.name].skip and "合法 zip" in by_name[corrupt.name].reason
+        assert not by_name[ok.name].skip
+    print("plan_day_zips skip empty/corrupt OK")
+
+
 class _FakeClient(AthenaClient):
     """按脚本回放的假客户端（不发任何网络请求）。"""
 
@@ -125,6 +154,8 @@ class _FakeClient(AthenaClient):
 
     def stop_job(self, dataset_id: int, job_id: int) -> None:
         self.calls.append(f"stop:{dataset_id}:{job_id}")
+        # stop 之后再查应视为已结束，避免 _wait_job_not_running 空等
+        self.statuses.clear()
 
     def get_upload_signature(self, dataset_id: int) -> Dict[str, str]:
         self.calls.append(f"signature:{dataset_id}")
@@ -184,14 +215,15 @@ def test_upload_one_zip_success_flow():
 def test_upload_one_zip_skips_when_dataset_missing():
     with tempfile.TemporaryDirectory() as td:
         datasets = Path(td) / "d" / "datasets"
-        _mkzip(datasets, "平均料型_实例分割数据集.zip")
+        _mkzip(datasets, "重废9_实例分割数据集.zip")
         plan = plan_day_zips(datasets)[0]
+        assert not plan.skip
         client = _FakeClient(dataset_id=None)
         item = upload_one_zip(plan, client)
         assert item.status == "skipped"
         assert "平台上没有数据集" in item.message
         # 未发生任何直传/建任务
-        assert client.calls == ["search:永锋-平均料型"]
+        assert client.calls == ["search:永锋-重废9"]
     print("upload_one_zip missing dataset skip OK")
 
 
@@ -212,6 +244,8 @@ def test_upload_zips_for_dates_aggregates():
         assert "永锋-重废1" in text
         assert "2026-09-02" in text
         assert text.count("导入成功") == 2
+        assert "全部日期处理完成：成功 2 个，跳过 2 个，失败 0 个。" in text
+        assert "✅ 永锋数据集上传完成" not in text
     print("upload_zips_for_dates aggregation OK")
 
 
@@ -222,7 +256,28 @@ def test_settings_upload_credentials():
     assert cfg.password
     assert cfg.namespace == 1
     assert cfg.dataset_name_prefix == "永锋-"
+    assert cfg.impurity_dataset_name == "永锋废钢杂质分割"
+    assert cfg.impurity_dataset_id == 28392
     print("settings upload credentials OK")
+
+
+def test_upload_one_zip_impurity_uses_fixed_id():
+    """杂质包不走搜名，直接用配置的固定 dataset id。"""
+    with tempfile.TemporaryDirectory() as td:
+        datasets = Path(td) / "d" / "datasets"
+        _mkzip(datasets, IMPURITY_ZIP_NAME)
+        plan = plan_day_zips(datasets)[0]
+        assert plan.dataset_name == "永锋废钢杂质分割"
+        client = _FakeClient(dataset_id=999, statuses=[2, 3])
+        item = upload_one_zip(plan, client)
+        assert item.status == "uploaded"
+        assert item.dataset_id == 28392
+        assert not any(c.startswith("search:") for c in client.calls)
+        assert client.calls[0] == "busy:28392"
+        assert client.calls[1] == "signature:28392"
+        assert client.calls[2] == "put"
+        assert client.calls[3] == "job:28392:tmp/uploads/datasets/abc123"
+    print("upload_one_zip impurity fixed id OK")
 
 
 def test_same_dataset_entry_defers_when_stuck():
@@ -273,16 +328,18 @@ def test_same_dataset_entry_defers_when_stuck():
     print("same-dataset entry defer OK")
 
 
-def test_retry_round_gives_up_when_platform_job_still_running():
-    """统一重试时，若平台上占入口的任务仍在运行，不抢入口，记失败。"""
+def test_retry_round_stops_own_job_then_reuploads():
+    """自己的任务仍在跑：只停永锋管辖入口上的本任务，再重传。"""
     from agent.yongfeng.scrap_uploader import upload_zips_for_dates
     from pathlib import Path as P
     import tempfile
 
     class _StuckStillRunningClient(_FakeClient):
         def __init__(self):
-            super().__init__(dataset_id=42, statuses=[2, 2])
+            # 首轮 wait 超时后：重试轮 get_job_status 仍为 2 → stop → 重传成功
+            super().__init__(dataset_id=42, statuses=[2])
             self._stuck_used = False
+            self._job_n = 1000
 
         def wait_job(self, job_id: int) -> Dict[str, Any]:
             if not self._stuck_used:
@@ -290,27 +347,27 @@ def test_retry_round_gives_up_when_platform_job_still_running():
                 raise YongfengUploadError(f"导入任务 {job_id} 等待超时")
             return {"status": 3}
 
+        def create_import_job(self, dataset_id: int, key: str) -> int:
+            self._job_n += 1
+            self.calls.append(f"job:{dataset_id}:{key}")
+            return self._job_n
+
     with tempfile.TemporaryDirectory() as td:
         root = P(td)
         _mkzip(root / "2026-09-01" / "datasets", "重废1_实例分割数据集.zip")
-        _mkzip(root / "2026-09-02" / "datasets", "重废1_实例分割数据集.zip")
         _mkzip(root / "2026-09-02" / "datasets", "废钢分类数据集.zip")
         client = _StuckStillRunningClient()
         result = upload_zips_for_dates(
             str(root), dates=["2026-09-01", "2026-09-02"], client=client
         )
-        assert result["uploaded"] == 1   # 09-02 废钢分类
-        assert result["failed"] == 2     # 两天重废1：任务仍在运行，不抢入口
-        assert result["skipped"] == 0
+        assert result["uploaded"] == 2
+        assert result["failed"] == 0
         text = result["summary_text"]
-        assert "【统一重试】" in text
-        assert "仍在运行" in text
-        assert "不抢入口" in text
-        # 标记失败时同步终止平台任务（两条失败都终止了任务 1001）
+        assert "【统一重试】" not in text  # 总结已合并为最终态
+        assert "重试导入成功" in text or "导入成功" in text
         stops = [c for c in client.calls if c.startswith("stop:")]
-        assert stops == ["stop:42:1001", "stop:42:1001"]
-        assert "已终止平台任务" in text
-    print("retry gives up when still running OK")
+        assert stops == ["stop:42:1001"]  # 只停自己的任务
+    print("retry stops own job then reuploads OK")
 
 
 def test_retry_round_rechecks_own_job_and_recovers():
@@ -345,6 +402,8 @@ def test_retry_round_rechecks_own_job_and_recovers():
         text = result["summary_text"]
         assert "重查确认已导入成功" in text
         assert "重试导入成功" in text
+        assert "【统一重试】" not in text
+        assert text.count("⏳") == 0  # 最终总结不含首轮暂存行
         # 09-01 的重废1 没有重传：put 次数 = 09-01首轮 + 09-02分类 + 09-02重废1重试 = 3
         assert client.calls.count("put") == 3
     print("retry recheck own job OK")
@@ -376,14 +435,14 @@ def test_first_round_network_error_retries_once():
         assert result["uploaded"] == 1
         assert result["failed"] == 0
         text = result["summary_text"]
-        assert "首轮失败（MinIO 直传中断（网络））" in text
+        # 最终总结只保留重试成功态，不再夹带首轮 ⏳ 行
         assert "重试导入成功" in text
+        assert "⏳" not in text
     print("first-round network error retry OK")
 
 
 def test_cross_run_busy_entry_waits_not_interrupts():
-    """重复发上传指令时：平台上别的会话/上一轮留下的在跑任务会被
-    先查到，不抢入口，暂存到统一重试；仍在跑就记失败让用户稍后补传。"""
+    """别人会话留下的在跑任务：不抢入口、不 stop，记失败让用户稍后补传。"""
     from agent.yongfeng.scrap_uploader import upload_zips_for_dates
     from pathlib import Path as P
     import tempfile
@@ -407,20 +466,51 @@ def test_cross_run_busy_entry_waits_not_interrupts():
         _mkzip(root / "2026-09-01" / "datasets", "重废1_实例分割数据集.zip")
         client = _ForeignJobRunningClient()
         result = upload_zips_for_dates(str(root), dates=["2026-09-01"], client=client)
-        # 首轮入口被占 → 暂存；重试轮重查任务 23700 仍在跑 → 不抢入口记失败
         assert result["uploaded"] == 0
         assert result["failed"] == 1
         text = result["summary_text"]
-        assert "首轮入口被占" in text
-        assert "任务 23700 仍在运行" in text
-        # 标记失败时终止了平台上残留的任务
+        assert "仍在运行" in text
+        assert "未终止他人任务" in text
+        # 绝不 stop 别人的任务
         stops = [c for c in client.calls if c.startswith("stop:")]
-        assert stops == ["stop:42:23700"]
-        assert "已终止平台任务" in text
-        # 全程没有直传、没有建新任务（不会把平台上的任务顶掉）
+        assert stops == []
         assert "put" not in client.calls
         assert not any(c.startswith("job:") for c in client.calls)
     print("cross-run busy entry OK")
+
+
+def test_pending_record_recovers_across_runs():
+    """wait 超时后进程中断：pending 留下；下次重查已成功则补记 uploaded，不再重传。"""
+    from agent.yongfeng.scrap_uploader import (
+        upload_zips_for_dates,
+        RECORD_FILE_NAME,
+        PENDING_FILE_NAME,
+        _record_pending,
+    )
+    from pathlib import Path as P
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as td:
+        root = P(td)
+        datasets = root / "2026-09-01" / "datasets"
+        z = _mkzip(datasets, "重废1_实例分割数据集.zip")
+        # 模拟上一轮：已建任务 555，但 wait 超时未写 uploaded.txt
+        _record_pending(z, "永锋-重废1", 555, 42)
+
+        class _RecoverClient(_FakeClient):
+            def get_job_status(self, job_id: int) -> Dict[str, Any]:
+                self.calls.append(f"status:{job_id}")
+                return {"status": 3, "duration": 1, "info": {}}
+
+        client = _RecoverClient(dataset_id=42)
+        result = upload_zips_for_dates(str(root), dates=["2026-09-01"], client=client)
+        assert result["uploaded"] == 0
+        assert result["skipped"] == 1
+        assert "已成功导入过" in result["summary_text"]
+        assert "put" not in client.calls
+        assert (datasets / RECORD_FILE_NAME).is_file()
+        assert not (datasets / PENDING_FILE_NAME).exists()
+    print("pending record recovers across runs OK")
 
 
 def test_run_with_deadline_supervision():
@@ -499,14 +589,17 @@ def main():
     test_plan_day_zips_dedup_prefers_instance()
     test_plan_day_zips_edge_fallback_when_no_instance()
     test_plan_day_zips_ignores_non_zip_and_unknown_names()
+    test_plan_day_zips_skips_empty_and_corrupt()
     test_upload_one_zip_success_flow()
     test_upload_one_zip_skips_when_dataset_missing()
+    test_upload_one_zip_impurity_uses_fixed_id()
     test_upload_zips_for_dates_aggregates()
     test_same_dataset_entry_defers_when_stuck()
-    test_retry_round_gives_up_when_platform_job_still_running()
+    test_retry_round_stops_own_job_then_reuploads()
     test_retry_round_rechecks_own_job_and_recovers()
     test_first_round_network_error_retries_once()
     test_cross_run_busy_entry_waits_not_interrupts()
+    test_pending_record_recovers_across_runs()
     test_run_with_deadline_supervision()
     test_uploaded_record_prevents_duplicate_import()
     test_settings_upload_credentials()

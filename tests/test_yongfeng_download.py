@@ -32,6 +32,7 @@ from agent.yongfeng.downloader import (
 from agent.yongfeng.scrap_client import YongfengScrapClient, _token_from_login
 from agent.yongfeng.scrap_packager import (
     CLASSIFICATION_NAME,
+    IMPURITY_NAME,
     MULTILABEL_NAME,
     pack_day_datasets,
     pack_multilabel_from_disk,
@@ -147,11 +148,14 @@ def test_auto_pack_skips_multilabel(tmp_path: Path):
     )
     names = {p.name for p in zips}
     assert f"{CLASSIFICATION_NAME}.zip" in names
+    assert f"{IMPURITY_NAME}.zip" in names
     assert "重废1_实例分割数据集.zip" in names
     assert "重废1_边缘分割数据集.zip" in names
     assert f"{MULTILABEL_NAME}.zip" not in names
     by_name = {p.name: p for p in zips}
     with zipfile.ZipFile(by_name[f"{CLASSIFICATION_NAME}.zip"]) as zf:
+        assert sorted(zf.namelist()) == ["images/heavy.jpg", "images/mixed.jpg"]
+    with zipfile.ZipFile(by_name[f"{IMPURITY_NAME}.zip"]) as zf:
         assert sorted(zf.namelist()) == ["images/heavy.jpg", "images/mixed.jpg"]
     with zipfile.ZipFile(by_name["重废1_实例分割数据集.zip"]) as zf:
         assert zf.namelist() == ["images/heavy.jpg"]
@@ -361,7 +365,47 @@ def test_login_token_falls_back_to_satoken_cookie():
     client.session.cookies.set("satoken", "from-cookie")
     client.login()
     assert client.token == "from-cookie"
+    # 重复登录不得因 jar 里同名 satoken 冲突而失败
+    client.login()
+    assert client.token == "from-cookie"
+    assert len([c for c in client.session.cookies if c.name == "satoken"]) == 1
     print("login cookie fallback OK")
+
+
+def test_download_image_404_does_not_relogin(tmp_path: Path):
+    from agent.yongfeng.downloader import _download_image
+
+    client = YongfengScrapClient()
+    login_calls = {"n": 0}
+
+    def _boom_login():
+        login_calls["n"] += 1
+        raise AssertionError("404 不应触发重登")
+
+    class _Resp:
+        status_code = 404
+        content = b"<?xml missing?>"
+        headers = {"Content-Type": "application/xml"}
+
+        def raise_for_status(self):
+            import requests
+
+            err = requests.HTTPError("404")
+            err.response = self
+            raise err
+
+    client.token = "t"
+    client.login = _boom_login  # type: ignore[method-assign]
+    client.session.get = lambda *args, **kwargs: _Resp()  # type: ignore[method-assign]
+    dest = tmp_path / "a.jpg"
+    try:
+        _download_image(client, "http://example/missing.jpg", dest)
+        assert False, "expected 404 RuntimeError"
+    except RuntimeError as exc:
+        assert "404" in str(exc)
+    assert login_calls["n"] == 0
+    assert not dest.exists()
+    print("download 404 no relogin OK")
 
 
 def test_yongfeng_scp_configured_from_site_isolated_from_shenglong(tmp_path: Path):
@@ -433,6 +477,32 @@ def test_yongfeng_scp_failure_does_not_raise(tmp_path: Path):
     print("scp failure does not raise OK")
 
 
+def test_yongfeng_scp_skips_truck_dirs_without_images(tmp_path: Path):
+    from types import SimpleNamespace
+
+    day = tmp_path / "2026-08-03"
+    empty_truck = day / "2026-08-03_鲁H511Y7_统料"
+    empty_truck.mkdir(parents=True)
+    (empty_truck / ".briefme_flow").write_text("flow\n", encoding="utf-8")
+
+    fake_cfg = SimpleNamespace(
+        remote_host="10.0.0.1",
+        remote_port=22,
+        remote_user="test",
+        remote_image_root="/tmp/yf",
+        remote_scp_timeout_sec=30,
+    )
+    with patch("agent.yongfeng.scrap_remote_sync._cfg", return_value=fake_cfg), patch(
+        "agent.yongfeng.scrap_remote_sync.subprocess.run"
+    ) as mocked:
+        result = sync_date_folder(day)
+    mocked.assert_not_called()
+    assert result.ok is True
+    assert result.skipped is True
+    assert "没有可同步" in result.error
+    print("scp skips empty truck dirs OK")
+
+
 def test_looks_like_image_rejects_html_poison():
     assert _looks_like_image(b"\xff\xd8\xff\xe0" + b"\x00" * 20)
     assert not _looks_like_image(b"<html>not a jpeg</html>")
@@ -500,6 +570,8 @@ if __name__ == "__main__":
         test_existing_image_matches_shifted_daily_index(root / "imgskip")
         test_yongfeng_scp_configured_from_site_isolated_from_shenglong(root / "scp")
         test_yongfeng_scp_failure_does_not_raise(root / "scp-fail")
+        test_yongfeng_scp_skips_truck_dirs_without_images(root / "scp-empty")
+        test_download_image_404_does_not_relogin(root / "img404")
     test_looks_like_image_rejects_html_poison()
     test_query_list_paginates_with_pageindex()
     test_parse_requested_dates_single_range_and_list()

@@ -13,6 +13,7 @@ BriefMe 是一个为工业现场量身定制的数据统计交互智能体。
 * **前端交互**: `gradio` (构建 Web UI 界面)
 * **大语言模型**: DeepSeek（`DEEPSEEK_API_KEY`，OpenAI 兼容接口；负责自然语言理解与 Function Calling）
 * **网络请求**: `httpx` (对接各类现场专网 API)
+* **对象存储直传**: `boto3` (永锋数据集上传金睛平台 MinIO，AWS SigV4)
 * **自动化办公**: `openpyxl` (生成数据核对表), `python-pptx` (生成自动化汇报 PPT), `tencent docs upload` (生成报表后自动上传腾讯文档在线表格)
 * **质量保证**: `pytest`, `flake8` (自动化测试与静态检查)
 
@@ -42,9 +43,11 @@ BriefMe 是一个为工业现场量身定制的数据统计交互智能体。
 <保存路径>/
   download_progress.log
   YYYY-MM-DD/
-    YYYY-MM-DD_车牌_重废1(85)、重废2(15)/
-      20260901_zhongfei1_85_zhongfei2_15_1_1_1.jpg
+    YYYY-MM-DD_车牌_重废1/
+      20260901_zhongfei1_1_1_1.jpg
     datasets/
+      废钢分类数据集.zip
+      废钢杂质数据集.zip          # 分类包副本，供杂质分割入口
       重废1_实例分割数据集.zip
       重废1_边缘分割数据集.zip
 ```
@@ -55,7 +58,7 @@ BriefMe 是一个为工业现场量身定制的数据统计交互智能体。
   * 每天下完后 scp 到  
     `cisdi@10.233.224.206:/mnt/data01/embedded/projects/wangyutai/yf_feigang/test_images_full_car/<日期>/`  
     只拷车次文件夹，不拷 `datasets/`，**禁止写入盛隆 `sl_feigang`**。scp 失败只记总结，**不中断下载**。
-  * 实例/边缘分割包自动打。**废钢多标签分类数据集不会自动打**。
+  * 自动打「废钢分类数据集」并复制「废钢杂质数据集」；实例/边缘包按主料型打。**废钢多标签分类数据集不会自动打**。
 * **页面用法**（「永锋钢铁 → 检判原图上传下载」）：
   * `下载 2026-09-01 的【永锋】检判原图`
   * `下载 2026-08-31 到 2026-09-01 的【永锋】检判原图`
@@ -71,38 +74,46 @@ python -m agent.yongfeng.downloader --start 2026-09-01 --end 2026-09-01 --output
 #### 1.3 永锋数据集上传（金睛平台，单独指令）
 
 把下载产物 `<保存路径>/<日期>/datasets/` 里的 zip 上传到赛信金睛视觉AI开发平台
-（`http://pre-athena-mv.cisdigital.cn`，namespace=1）的「永锋-」系列数据集。
-**由单独的上传指令触发**，下载结束不会自动上传。
+（`http://pre-athena-mv.cisdigital.cn`，namespace=1）的永锋系列数据集
+（「永锋-」前缀入口 +「永锋废钢杂质分割」）。
+**由单独的上传指令触发**，下载结束不会自动上传。左侧「图像保存路径」须与下载时同一目录。
 
 * **匹配规则**（zip 文件名前缀对上即可）：
-  * `废钢分类数据集.zip` → `永锋-废钢分类`；`重废1_*.zip` → `永锋-重废1`；
+  * `废钢分类数据集.zip` → `永锋-废钢分类`；`废钢杂质数据集.zip`（分类包副本）→ `永锋废钢杂质分割`（id=28392）；`重废1_*.zip` → `永锋-重废1`；
     `统料_*.zip` → `永锋-统料`；`统料1_*.zip` → `永锋-统料1`，以此类推。
+  * 本地打包若用全角罗马数字（`重废Ⅰ` / `统料Ⅱ`），上传前会归一成半角
+    `1/2/3`，与平台数据集名对齐。
   * 同料型的**实例分割包和边缘分割包内容相同，只传一个**（优先实例分割包）。
-  * `平均料型_*.zip` 平台没有对应数据集，**跳过并在总结里报告**。
+  * `平均料型_*.zip` 平台没有对应数据集，**计划阶段直接跳过**。
+  * **空文件 / 损坏或伪后缀 zip** 计划阶段跳过，不占入口。
   * 上传前逐个调平台搜索接口核对数据集存在，防止平台改名后传错地方。
 * **导入方式**：**只用无标注模式**（不传 `annotation_format`）；
   **手动导入**——程序先把 zip 直传平台 MinIO，再显式创建导入任务并等待完成，
   不用自动导入。
-* **失败处理（两轮制）**：首轮某个 zip 传不上（网络失败 / 导入任务超时 /
-  入口被未完成任务占用）先暂存，不打断其他入口；全部日期传完后
-  **统一重试一次**（重试前重查平台上还在跑的任务，仍在跑就不抢入口）；
-  重试仍失败才计入失败总结，并**顺手终止平台上对应的任务**
-  （`devel/dataset-jobs/<id>/stop/`，幂等），避免下一轮指令冲突。
+* **失败处理（两轮制）**：多日一次编排（跨日共用入口锁）。首轮某个 zip
+  传不上（网络失败 / 导入任务超时 / 入口被占）先暂存，不打断其他入口；
+  全部日期传完后**统一重试一次**。重试前重查平台任务：
+  * 自己超时的任务已成功 → 补记成功，不重传；
+  * 自己的任务仍在跑 → **只终止本程序管辖入口**（「永锋-」前缀 +「永锋废钢杂质分割」）上、自己建的任务，再重传；
+  * 别人会话留下的在跑任务 → **不 stop、不抢入口**，本轮记失败，稍后重发即可。
+  登录与平台 API 对 502/503/504、网络抖动会有限次退避重试。
 * **直传卡死监督**：MinIO 直传有概率卡死，单个 zip 超过
-  `upload_timeout`（默认 5 分钟）就终止该上传，先传其他 zip，
-  全部传完后统一重试。
+  `upload_timeout`（默认 5 分钟）就终止该上传（abort + 短读超时），
+  先传其他 zip，全部传完后统一重试。
 * **平台并发约束**：同一数据集入口一次只能上传/导入一个压缩包，
-  同时多个会中断之前的；不同入口互不影响。程序全程串行处理天然满足；
-  上传前还会查该入口有没有别的会话/上一轮留下的在跑任务，有就先
-  不抢入口，暂存到最后统一重试。
-* **防重复导入**：平台不去重（重复导入会叠图）。每次成功导入都记进
-  `<日期>/datasets/uploaded.txt`，重发同一日期的上传指令时，已成功的
-  zip 自动跳过；删掉记录文件即可强制重传。
+  同时多个会中断之前的；不同入口互不影响。程序全程串行；上传前还会查
+  该入口有没有在跑任务，有就暂存到最后统一重试。
+* **防重复导入**：平台不去重（重复导入会叠图）。
+  * 每次成功导入记进该日 `<日期>/datasets/uploaded.txt`（**只按文件名**去重）；
+  * 建任务后先写 `upload_pending.txt`：若 wait 超时/进程中断，下次重查平台，
+    已成功则补记 `uploaded.txt` 并跳过，避免叠图；
+  * 重发同一指令时已成功的 zip 自动跳过；删掉对应 `uploaded.txt` 行/文件可强制重传。
 * **凭据**：`config/settings.py` 的 `YongfengDatasetUploadConfig`
-  （intern1 / liuzhaocheng2026，可用 `.env` 的 `YONGFENG_UPLOAD_*` 覆盖）。
+  （可用 `.env` 的 `YONGFENG_UPLOAD_*` 覆盖）。
 * **页面用法**（「永锋钢铁 → 检判原图上传下载」）：
   * `上传 2026-09-01 的【永锋】数据集`
   * `上传 2026-08-31、2026-09-01 的【永锋】数据集`
+  * `上传 2026-08-01到2026-10-27 的【永锋】数据集`
   * 「下载并上传」这类混合指令先走下载，下完再单独发上传指令。
 
 ### 2. 镔鑫钢铁 · 废钢检判 ♻️
@@ -261,6 +272,7 @@ BriefMe_Agent/
 │   └── yongfeng/                  # 永锋烧结矿 + 检判原图（scrap_* 独立，禁止 import 盛隆 dict）
 │       ├── downloader.py          # srape-steel 原图按日按车下载
 │       ├── scrap_client.py        # 登录 Cookie satoken；列表 current/size
+│       ├── scrap_uploader.py      # datasets zip 上传金睛平台
 │       ├── scrap_naming.py / scrap_packager.py / scrap_remote_sync.py
 ├── tools/                         # CLI 批量导出
 ├── tests/
@@ -269,24 +281,26 @@ BriefMe_Agent/
 
 ---
 
-## 本次 PR：永锋检判原图下载
+## 本次 PR：永锋数据集上传（金睛）+ 原图下载加固
 
-对齐盛隆手册的车次目录命名与打包节奏；下载只走永锋 srape-steel，**不改盛隆统计公式**。
+在已有永锋检判原图下载之上，增加 datasets zip → 金睛平台上传（含分类包副本「废钢杂质数据集」→「永锋废钢杂质分割」），并加固下载侧 404/scp 行为。**不改盛隆统计公式**。
 
 | 范围 | 说明 |
 |---|---|
-| 永锋下载 | `agent/yongfeng/scrap_*.py`、`downloader.py`：登录 `satoken`、按日按车落盘、续传、实例/边缘自动打包、多标签需确认 |
-| 路由 | `agent/image_download_route.py`、`app.py`、`core.py`、`tools.py`：永锋/盛隆互斥；「永锋 + MINIO/3000」仍走永锋，裸 `MINIO图像下载` 仍是盛隆 |
-| 盛隆原图 | 同车牌同料型第二车写入 `规范名_N`，避免混车；空日不建 `datasets/` |
-| 远程 | 永锋 scp → `yf_feigang`；盛隆仍是 `sl_feigang`。失败不中断本地下载 |
-| 测试 | `tests/test_yongfeng_download.py`、`test_image_download_route.py`、`test_handbook_adversarial.py` |
-| 不要提交 | `download_log.txt`、`deduction_exclusion_log.json`、桌面原图、`venv` |
+| 打包 | `scrap_packager.py`：自动打「废钢分类数据集」，并复制为「废钢杂质数据集」；实例/边缘按主料型 |
+| 永锋上传 | `scrap_uploader.py`：无标注手动导入、两轮重试、入口锁、只停本方管辖任务、`uploaded.txt` / `upload_pending.txt` 防叠图；杂质入口固定 id=28392 |
+| 页面 / 路由 | `app.py`、`image_download_route.py`、`core.py`、`tools.py`：栏目「检判原图上传下载」；上传与下载指令互斥 |
+| 下载加固 | `downloader.py` / `scrap_client.py` / `scrap_remote_sync.py`：404 不重登、空车不 scp、远程不可达后续日期跳过 scp |
+| 配置 / 依赖 | `YongfengDatasetUploadConfig`；`requirements.txt` 增加 `boto3` |
+| 测试 | `tests/test_yongfeng_upload.py`、`test_yongfeng_download.py` |
+| 不要提交 | `download_log.txt`、运行时污染的 `deduction_exclusion_log.json`、桌面原图、`venv`、`/tmp` 下临时跑批脚本 |
 
 提交前至少跑：
 
 ```bash
-python -m pytest tests/test_handbook_adversarial.py tests/test_yongfeng_download.py \
-  tests/test_image_download_route.py tests/test_shenglong_download.py -q
+python -m pytest tests/test_yongfeng_upload.py tests/test_yongfeng_download.py \
+  tests/test_image_download_route.py tests/test_handbook_adversarial.py -q
+python tests/test_yongfeng_upload.py
 python -c "import app; app.build_ui(); print('UI OK')"
 ```
 
