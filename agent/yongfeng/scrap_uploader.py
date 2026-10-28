@@ -91,6 +91,10 @@ class UploadReport:
     def failed(self) -> int:
         return sum(1 for it in self.items if it.status == "failed")
 
+    @property
+    def retry_pending(self) -> int:
+        return sum(1 for it in self.items if it.status == "retry_pending")
+
     def to_lines(self) -> List[str]:
         lines: List[str] = []
         for it in self.items:
@@ -99,9 +103,27 @@ class UploadReport:
                 lines.append(f"- {name} → {it.dataset_name}（任务 {it.job_id}，导入成功）")
             elif it.status == "skipped":
                 lines.append(f"- {name} → ⏭️ {it.message}")
+            elif it.status == "retry_pending":
+                lines.append(f"- {name} → ⏳ {it.message}")
             else:
                 lines.append(f"- {name} → ❌ {it.message}")
         return lines
+
+
+@dataclass
+class PendingRetry:
+    """首轮没传上去、留到最后统一重试的 zip。
+
+    blocking_job_id：占用该入口的未完成任务 id（任务超时未确认完成时，
+    平台上可能还在跑；重试前先重查它的状态，仍在跑就不抢入口）。
+    own_job：该任务是否就是本 zip 自己的（是的话重查成功即导入成功，
+    不必重传）。
+    """
+
+    plan: ZipPlan
+    reason: str = ""
+    blocking_job_id: Optional[int] = None
+    own_job: bool = False
 
 
 def parse_zip_prefix(zip_name: str) -> Optional[str]:
@@ -373,16 +395,21 @@ def upload_one_zip(plan: ZipPlan, client: AthenaClient) -> UploadItem:
 def upload_day_zips(
     day_dir: Path,
     client: Optional[AthenaClient] = None,
-    blocked_datasets: Optional[set] = None,
+    blocked_datasets: Optional[Dict[str, int]] = None,
+    deferred: Optional[List[PendingRetry]] = None,
 ) -> Dict[str, Any]:
-    """上传一个日期目录 datasets/ 里的 zip。失败不中断，逐条汇总。
+    """上传一个日期目录 datasets/ 里的 zip（第一轮）。失败不中断，逐条汇总。
 
-    blocked_datasets：平台同一数据集入口一次只能上传/导入一个压缩包，
-    同时多个会中断之前的。若某入口已有未完成的导入任务，本轮跳过该
-    入口的后续 zip（不同入口互不影响，仍正常上传）。
+    平台约束：同一数据集入口一次只能上传/导入一个压缩包，同时多个会
+    中断之前的；不同入口互不影响。首轮传不上的（网络失败 / 导入任务
+    超时 / 入口被未完成任务占用）不立刻下结论，先记入 deferred 暂存，
+    等全部日期传完后由 upload_zips_for_dates 统一重试一次。
+
+    blocked_datasets：入口名 → 未完成任务 id（跨日期共享）。
     """
     client = client or AthenaClient()
-    blocked = blocked_datasets if blocked_datasets is not None else set()
+    blocked = blocked_datasets if blocked_datasets is not None else {}
+    deferred = deferred if deferred is not None else []
     datasets_dir = day_dir / "datasets"
     plans = plan_day_zips(datasets_dir)
     items: List[UploadItem] = []
@@ -398,31 +425,53 @@ def upload_day_zips(
             )
             continue
         if plan.dataset_name in blocked:
+            reason = f"入口被未完成任务 {blocked[plan.dataset_name]} 占用"
             items.append(
                 UploadItem(
                     zip=str(plan.zip_path),
                     dataset_name=plan.dataset_name,
-                    status="skipped",
-                    message=(
-                        "该数据集入口已有未完成的导入任务（平台同入口一次只能"
-                        "导入一个包，并发会中断之前的），本轮跳过；"
-                        "平台任务结束后重发指令即可补传"
-                    ),
+                    status="retry_pending",
+                    message=f"{reason}，暂时跳过，最后统一重试",
+                )
+            )
+            deferred.append(
+                PendingRetry(
+                    plan,
+                    reason=reason,
+                    blocking_job_id=blocked[plan.dataset_name],
                 )
             )
             continue
         try:
-            items.append(upload_one_zip(plan, client))
-        except Exception as exc:  # noqa: BLE001 单条失败不中断
-            logger.error("上传 %s 失败: %s", plan.zip_path.name, exc)
+            item = upload_one_zip(plan, client)
+        except Exception as exc:  # noqa: BLE001 首轮失败先暂存，最后统一重试
+            logger.warning("上传 %s 首轮失败: %s", plan.zip_path.name, exc)
             items.append(
                 UploadItem(
                     zip=str(plan.zip_path),
                     dataset_name=plan.dataset_name,
-                    status="failed",
-                    message=str(exc),
+                    status="retry_pending",
+                    message=f"首轮失败（{exc}），最后统一重试",
                 )
             )
+            deferred.append(PendingRetry(plan, reason=str(exc)))
+            continue
+        if item.status == "failed":
+            # 导入任务未确认完成（超时/失败）时平台上可能还在跑，
+            # 锁住入口，防止后续同入口的 zip 把它顶掉。
+            if item.job_id:
+                blocked[item.dataset_name] = item.job_id
+            deferred.append(
+                PendingRetry(
+                    plan,
+                    reason=item.message,
+                    blocking_job_id=item.job_id,
+                    own_job=True,
+                )
+            )
+            item.status = "retry_pending"
+            item.message = f"首轮失败（{item.message}），最后统一重试"
+        items.append(item)
     report = UploadReport(items=items, days=[day_dir.name])
     return {
         "day": day_dir.name,
@@ -440,6 +489,7 @@ def upload_day_zips(
         ],
         "uploaded": report.uploaded,
         "skipped": report.skipped,
+        "retry_pending": report.retry_pending,
         "failed": report.failed,
         "lines": report.to_lines(),
     }
@@ -456,12 +506,79 @@ def _discover_dataset_dates(output_dir: Path) -> List[str]:
     return dates
 
 
+def _retry_deferred(
+    deferred: List[PendingRetry],
+    client: AthenaClient,
+) -> List[UploadItem]:
+    """最后统一重试首轮没传上的 zip（每条只重试一次）。
+
+    重试前先重查占用入口的任务：仍在跑就不抢入口（避免中断）；
+    自己的任务其实已经成功，则直接记成功，不必重传。
+    """
+    retry_items: List[UploadItem] = []
+    for pend in deferred:
+        item = UploadItem(zip=str(pend.plan.zip_path), dataset_name=pend.plan.dataset_name)
+        try:
+            if pend.blocking_job_id:
+                status = client.get_job_status(pend.blocking_job_id).get("status")
+                if status == 2:
+                    item.status = "failed"
+                    item.job_id = pend.blocking_job_id
+                    item.message = (
+                        f"重试时平台上任务 {pend.blocking_job_id} 仍在运行，"
+                        "本轮不抢入口（避免中断），请稍后重发指令补传"
+                    )
+                    retry_items.append(item)
+                    continue
+                if status == 3 and pend.own_job:
+                    # 首轮超时的任务其实已经导入成功
+                    item.status = "uploaded"
+                    item.job_id = pend.blocking_job_id
+                    item.message = "首轮超时的任务重查确认已导入成功"
+                    retry_items.append(item)
+                    continue
+                # 任务已结束（成功/失败）→ 入口空闲，重新上传
+            retry_item = upload_one_zip(pend.plan, client)
+            if retry_item.status == "uploaded":
+                retry_item.message = "重试导入成功"
+            else:
+                retry_item.message = f"重试仍失败：{retry_item.message}"
+            retry_items.append(retry_item)
+        except Exception as exc:  # noqa: BLE001 重试失败即最终失败
+            logger.warning("重试上传 %s 失败: %s", pend.plan.zip_path.name, exc)
+            item.status = "failed"
+            item.message = f"重试仍失败：{exc}"
+            retry_items.append(item)
+    return retry_items
+
+
+def _retry_lines(retry_items: List[UploadItem]) -> List[str]:
+    lines: List[str] = []
+    for it in retry_items:
+        rel = Path(it.zip)
+        day = rel.parent.parent.name
+        name = rel.name
+        if it.status == "uploaded":
+            lines.append(f"- {day}/{name} → {it.dataset_name}（任务 {it.job_id}，{it.message}）")
+        elif it.status == "skipped":
+            lines.append(f"- {day}/{name} → ⏭️ {it.message}")
+        else:
+            lines.append(f"- {day}/{name} → ❌ {it.message}")
+    return lines
+
+
 def upload_zips_for_dates(
     output_dir: str,
     dates: Optional[List[str]] = None,
     client: Optional[AthenaClient] = None,
 ) -> Dict[str, Any]:
-    """上传多个日期的 datasets/ zip。dates 缺省时扫目录下全部日期。"""
+    """上传多个日期的 datasets/ zip。dates 缺省时扫目录下全部日期。
+
+    两轮制（平台约束：同一数据集入口一次只能上传/导入一个包）：
+    第一轮按日期逐个传，传不上的先暂存（入口被占 / 网络失败 / 任务
+    超时），不打断其他入口；全部日期传完后，统一重试暂存的每一条；
+    重试仍失败才计为失败写进总结。
+    """
     client = client or AthenaClient()
     root = Path(output_dir).expanduser()
     if not dates:
@@ -470,27 +587,31 @@ def upload_zips_for_dates(
         raise YongfengUploadError(
             f"{output_dir} 下没有找到含 datasets/ 的日期目录"
         )
-    report = UploadReport()
     day_reports: List[Dict[str, Any]] = []
-    # 平台约束：同一数据集入口一次只能上传/导入一个压缩包，并发会中断
-    # 之前的。记录「导入任务已创建但未确认完成」的入口，后续日期跳过。
-    blocked_datasets: set = set()
+    main_items: List[UploadItem] = []
+    # 入口名 → 未完成任务 id（首轮导入超时未确认完成的入口）
+    blocked_datasets: Dict[str, int] = {}
+    deferred: List[PendingRetry] = []
     for date in dates:
         day_dir = root / date
         if not (day_dir / "datasets").is_dir():
-            report.items.append(
+            main_items.append(
                 UploadItem(
                     zip=str(day_dir / "datasets"),
                     status="skipped",
                     message=f"目录 {day_dir}/datasets 不存在，跳过",
                 )
             )
-            day_reports.append({"day": date, "items": [], "lines": report.to_lines()[-1:]})
+            day_reports.append(
+                {"day": date, "items": [], "lines": [f"- ⏭️ 目录 {date}/datasets 不存在，跳过"]}
+            )
             continue
-        day_report = upload_day_zips(day_dir, client=client, blocked_datasets=blocked_datasets)
+        day_report = upload_day_zips(
+            day_dir, client=client, blocked_datasets=blocked_datasets, deferred=deferred
+        )
         day_reports.append(day_report)
         for it in day_report["items"]:
-            report.items.append(
+            main_items.append(
                 UploadItem(
                     zip=it["zip"],
                     dataset_name=it["dataset_name"],
@@ -500,25 +621,47 @@ def upload_zips_for_dates(
                     message=it["message"],
                 )
             )
-            # 导入任务已建但没等到完成（超时/失败）→ 该入口可能仍有任务
-            # 在跑，锁住避免下一天的包把平台上的任务顶掉。
-            if it["job_id"] and it["status"] != "uploaded":
-                blocked_datasets.add(it["dataset_name"])
+
+    # ===== 第二轮：统一重试 =====
+    retry_items = _retry_deferred(deferred, client) if deferred else []
+
+    uploaded = sum(1 for it in main_items if it.status == "uploaded") + sum(
+        1 for it in retry_items if it.status == "uploaded"
+    )
+    skipped = sum(1 for it in main_items if it.status == "skipped") + sum(
+        1 for it in retry_items if it.status == "skipped"
+    )
+    failed = sum(1 for it in retry_items if it.status == "failed")
+
     lines = ["✅ 永锋数据集上传完成（金睛平台 pre-athena-mv）"]
     for day_report in day_reports:
         if day_report.get("lines"):
             lines.append(f"【{day_report.get('day')}】")
             lines.extend(day_report["lines"])
+    if retry_items:
+        lines.append("【统一重试】")
+        lines.extend(_retry_lines(retry_items))
     lines.append(
-        f"合计：成功 {report.uploaded} 个，跳过 {report.skipped} 个，失败 {report.failed} 个"
+        f"合计：成功 {uploaded} 个，跳过 {skipped} 个，失败 {failed} 个"
     )
     return {
         "output_dir": str(root),
         "dates": dates,
         "days": day_reports,
-        "uploaded": report.uploaded,
-        "skipped": report.skipped,
-        "failed": report.failed,
+        "uploaded": uploaded,
+        "skipped": skipped,
+        "failed": failed,
+        "retry_items": [
+            {
+                "zip": it.zip,
+                "dataset_name": it.dataset_name,
+                "dataset_id": it.dataset_id,
+                "job_id": it.job_id,
+                "status": it.status,
+                "message": it.message,
+            }
+            for it in retry_items
+        ],
         "lines": lines,
         "summary_text": "\n".join(lines),
     }

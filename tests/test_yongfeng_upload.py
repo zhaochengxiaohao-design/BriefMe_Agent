@@ -212,10 +212,10 @@ def test_settings_upload_credentials():
     print("settings upload credentials OK")
 
 
-def test_same_dataset_entry_blocked_after_stuck_import():
-    """平台约束：同一数据集入口一次只能导入一个包。第一天导入未完成时，
-    第二天同入口的 zip 必须跳过，其他入口不受影响。"""
-    from agent.yongfeng.scrap_uploader import upload_day_zips, plan_day_zips
+def test_same_dataset_entry_defers_when_stuck():
+    """平台约束：同一数据集入口一次只能导入一个包。首轮任务超时后，
+    入口被锁，后续同入口的 zip 暂存到最后统一重试（不是直接跳过）。"""
+    from agent.yongfeng.scrap_uploader import upload_day_zips, PendingRetry
     from pathlib import Path as P
     import tempfile
 
@@ -238,32 +238,37 @@ def test_same_dataset_entry_blocked_after_stuck_import():
         _mkzip(d2, "重废1_实例分割数据集.zip")
         _mkzip(d2, "废钢分类数据集.zip")
         client = _StuckClient()
-        blocked: set = set()
-        r1 = upload_day_zips(root / "2026-09-01", client=client, blocked_datasets=blocked)
-        assert r1["items"][0]["status"] == "failed"
-        assert r1["items"][0]["job_id"] == 1001  # 失败条目保留 job_id
-        blocked.add(r1["items"][0]["dataset_name"])
-        r2 = upload_day_zips(root / "2026-09-02", client=client, blocked_datasets=blocked)
+        blocked: Dict[str, int] = {}
+        deferred: List = []
+        r1 = upload_day_zips(root / "2026-09-01", client=client, blocked_datasets=blocked, deferred=deferred)
+        # 首轮超时：暂存待重试，失败条目保留 job_id
+        assert r1["items"][0]["status"] == "retry_pending"
+        assert r1["items"][0]["job_id"] == 1001
+        assert "统一重试" in r1["items"][0]["message"]
+        assert blocked == {"永锋-重废1": 1001}
+        assert len(deferred) == 1 and deferred[0].own_job
+        r2 = upload_day_zips(root / "2026-09-02", client=client, blocked_datasets=blocked, deferred=deferred)
         by_name = {P(it["zip"]).name: it for it in r2["items"]}
-        # 同入口（永锋-重废1）被锁：跳过且不再直传
-        assert by_name["重废1_实例分割数据集.zip"]["status"] == "skipped"
-        assert "未完成" in by_name["重废1_实例分割数据集.zip"]["message"]
+        # 同入口（永锋-重废1）被锁：暂存待重试，不再直传
+        assert by_name["重废1_实例分割数据集.zip"]["status"] == "retry_pending"
+        assert "入口被未完成任务 1001 占用" in by_name["重废1_实例分割数据集.zip"]["message"]
         assert "search:永锋-重废1" not in client.calls[1:]  # 没有再搜索/直传
         # 不同入口（永锋-废钢分类）不受影响，正常上传成功
         assert by_name["废钢分类数据集.zip"]["status"] == "uploaded"
-    print("same-dataset entry lock OK")
+        assert len(deferred) == 2
+        assert deferred[1].own_job is False and deferred[1].blocking_job_id == 1001
+    print("same-dataset entry defer OK")
 
 
-def test_upload_zips_for_dates_locks_stuck_entry_across_days():
-    """多日期编排：第一天重废1 导入超时 → 第二天重废1 自动跳过，
-    第二天废钢分类仍正常上传。"""
+def test_retry_round_gives_up_when_platform_job_still_running():
+    """统一重试时，若平台上占入口的任务仍在运行，不抢入口，记失败。"""
     from agent.yongfeng.scrap_uploader import upload_zips_for_dates
     from pathlib import Path as P
     import tempfile
 
-    class _StuckOnceClient(_FakeClient):
+    class _StuckStillRunningClient(_FakeClient):
         def __init__(self):
-            super().__init__(dataset_id=42)
+            super().__init__(dataset_id=42, statuses=[2, 2])
             self._stuck_used = False
 
         def wait_job(self, job_id: int) -> Dict[str, Any]:
@@ -278,15 +283,86 @@ def test_upload_zips_for_dates_locks_stuck_entry_across_days():
         _mkzip(root / "2026-09-02" / "datasets", "重废1_实例分割数据集.zip")
         _mkzip(root / "2026-09-02" / "datasets", "废钢分类数据集.zip")
         result = upload_zips_for_dates(
-            str(root), dates=["2026-09-01", "2026-09-02"], client=_StuckOnceClient()
+            str(root), dates=["2026-09-01", "2026-09-02"], client=_StuckStillRunningClient()
         )
-        assert result["failed"] == 1   # 09-01 重废1 超时
-        assert result["uploaded"] == 1  # 09-02 废钢分类
-        assert result["skipped"] == 1   # 09-02 重废1 被入口锁跳过
+        assert result["uploaded"] == 1   # 09-02 废钢分类
+        assert result["failed"] == 2     # 两天重废1：任务仍在运行，不抢入口
+        assert result["skipped"] == 0
         text = result["summary_text"]
-        assert "等待超时" in text
-        assert "已有未完成的导入任务" in text
-    print("cross-day entry lock OK")
+        assert "【统一重试】" in text
+        assert "仍在运行" in text
+        assert "不抢入口" in text
+        # 重试时没有再直传（put 只有首轮 09-01 一次）
+        # client 未保留引用，这里靠 failed message 断言即可
+    print("retry gives up when still running OK")
+
+
+def test_retry_round_rechecks_own_job_and_recovers():
+    """首轮超时的任务若其实已成功，重查确认即可，不必重传；
+    入口释放后，其他天被暂存的同入口 zip 重传成功。"""
+    from agent.yongfeng.scrap_uploader import upload_zips_for_dates
+    from pathlib import Path as P
+    import tempfile
+
+    class _RecoveredClient(_FakeClient):
+        def __init__(self):
+            super().__init__(dataset_id=42, statuses=[3])
+            self._stuck_used = False
+
+        def wait_job(self, job_id: int) -> Dict[str, Any]:
+            if not self._stuck_used:
+                self._stuck_used = True
+                raise YongfengUploadError(f"导入任务 {job_id} 等待超时")
+            return {"status": 3}
+
+    with tempfile.TemporaryDirectory() as td:
+        root = P(td)
+        _mkzip(root / "2026-09-01" / "datasets", "重废1_实例分割数据集.zip")
+        _mkzip(root / "2026-09-02" / "datasets", "重废1_实例分割数据集.zip")
+        _mkzip(root / "2026-09-02" / "datasets", "废钢分类数据集.zip")
+        client = _RecoveredClient()
+        result = upload_zips_for_dates(
+            str(root), dates=["2026-09-01", "2026-09-02"], client=client
+        )
+        assert result["uploaded"] == 3  # 09-01 重废1(重查) + 09-02 重废1(重传) + 09-02 分类
+        assert result["failed"] == 0
+        text = result["summary_text"]
+        assert "重查确认已导入成功" in text
+        assert "重试导入成功" in text
+        # 09-01 的重废1 没有重传：put 次数 = 09-01首轮 + 09-02分类 + 09-02重废1重试 = 3
+        assert client.calls.count("put") == 3
+    print("retry recheck own job OK")
+
+
+def test_first_round_network_error_retries_once():
+    """首轮网络失败 → 暂存 → 最后统一重试一次 → 重试成功。"""
+    from agent.yongfeng.scrap_uploader import upload_zips_for_dates
+    from pathlib import Path as P
+    import tempfile
+
+    class _FlakyPutClient(_FakeClient):
+        def __init__(self):
+            super().__init__(dataset_id=42)
+            self._put_failed = False
+
+        def put_zip_to_minio(self, signature: Dict[str, str], zip_path: Path) -> None:
+            if not self._put_failed:
+                self._put_failed = True
+                raise YongfengUploadError("MinIO 直传中断（网络）")
+            self.calls.append("put")
+
+    with tempfile.TemporaryDirectory() as td:
+        root = P(td)
+        _mkzip(root / "2026-09-01" / "datasets", "重废1_实例分割数据集.zip")
+        result = upload_zips_for_dates(
+            str(root), dates=["2026-09-01"], client=_FlakyPutClient()
+        )
+        assert result["uploaded"] == 1
+        assert result["failed"] == 0
+        text = result["summary_text"]
+        assert "首轮失败（MinIO 直传中断（网络））" in text
+        assert "重试导入成功" in text
+    print("first-round network error retry OK")
 
 
 def test_route_upload_directive():
@@ -313,8 +389,10 @@ def main():
     test_upload_one_zip_success_flow()
     test_upload_one_zip_skips_when_dataset_missing()
     test_upload_zips_for_dates_aggregates()
-    test_same_dataset_entry_blocked_after_stuck_import()
-    test_upload_zips_for_dates_locks_stuck_entry_across_days()
+    test_same_dataset_entry_defers_when_stuck()
+    test_retry_round_gives_up_when_platform_job_still_running()
+    test_retry_round_rechecks_own_job_and_recovers()
+    test_first_round_network_error_retries_once()
     test_settings_upload_credentials()
     test_route_upload_directive()
     print("\nAll yongfeng upload tests PASSED")
