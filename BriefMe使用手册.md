@@ -114,6 +114,7 @@ Ctrl+C
 | 【盛隆】重废归一化主表（排除无重废车次） | 生成盛隆新准确率口径主表 |
 | 下载昨日/近 7 天/指定日期【永锋】检判原图 | 从 srape-steel 按日按车下载智能判级原图（先填保存路径） |
 | 确认打包【永锋】多标签数据集 | 人工删完不合格图后再打永锋「废钢多标签分类数据集」 |
+| 上传指定日期【永锋】数据集 | 把 `<日期>/datasets/` 的 zip 上传到金睛平台永锋数据集（无标注导入） |
 | 下载昨日/近 7 天/指定日期【盛隆】检判原图 | 从 3000 按日按车下载智能判级原图（先填保存路径） |
 | 确认打包【盛隆】多标签数据集 | 人工删完不合格图后再打「废钢多标签分类数据集」 |
 | 昨日打包带情况 | 生成永锋打包带文本汇总 |
@@ -160,6 +161,24 @@ Ctrl+C
 - 车次文件夹：`YYYY-MM-DD_车牌_重废1(85)、重废2(15)`。默不加当日序号；仅第二辆同车牌同料型用 `_N`。
 - scp 到 `cisdi@10.233.224.206:.../yf_feigang/test_images_full_car/<日期>/`，不拷 `datasets/`，禁止写入 `sl_feigang`。失败不中断下载。
 - 实例/边缘包自动打；多标签必须人工筛图后确认。0 车不建空 `datasets/`。
+
+### 3.1.2 永锋钢铁 · 数据集上传
+
+把下载产物 `<保存路径>/<日期>/datasets/` 里的 zip 上传到赛信金睛视觉AI开发平台
+（`pre-athena-mv.cisdigital.cn`）的「永锋-」系列数据集。**由单独的上传指令触发**，
+下载结束不会自动上传。保存路径与下载时同一目录（左侧「图像保存路径」）。
+
+```text
+上传 2026-09-01 的【永锋】数据集
+上传 2026-08-31、2026-09-01 的【永锋】数据集
+```
+
+- zip 按前缀匹配数据集：`重废1_*.zip → 永锋-重废1`、`废钢分类数据集.zip → 永锋-废钢分类`，以此类推。
+- 同料型的实例分割包和边缘分割包内容相同，只传一个（优先实例分割包）。
+- `平均料型_*.zip` 平台没有对应数据集，跳过并在总结里报告。
+- **无标注模式**导入（不带标注信息）；程序先直传 zip 再**手动**建导入任务并等待结果，不用自动导入。单个 zip 失败不中断，全部写进总结。
+- 「下载并上传」这类混合指令先只走下载，下完再单独发上传指令。
+- 凭据在 `config/settings.py`（intern1 / liuzhaocheng2026），可用 `.env` 覆盖。
 
 ### 3.2 镔鑫钢铁 · 废钢检判
 
@@ -345,6 +364,7 @@ BriefMe_Agent/
 │       ├── scrap_client.py        # Cookie satoken；列表 current/size
 │       ├── scrap_naming.py
 │       ├── scrap_packager.py
+│       ├── scrap_uploader.py      # datasets/ zip 上传金睛平台（登录→搜索→MinIO直传→导入任务）
 │       └── scrap_remote_sync.py   # scp 到 yf_feigang，失败不中断
 │
 ├── tools/
@@ -511,6 +531,7 @@ python -m pytest tests/ -x --tb=short -q
 
 ```bash
 python -m pytest tests/test_handbook_adversarial.py tests/test_yongfeng_download.py \
+  tests/test_yongfeng_upload.py \
   tests/test_image_download_route.py tests/test_shenglong_download.py -q
 ```
 

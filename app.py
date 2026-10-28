@@ -26,6 +26,7 @@ from agent.image_download_route import (
     is_dual_plant_image_or_pack_request,
     is_shenglong_image_download,
     is_shenglong_multilabel_pack,
+    is_yongfeng_dataset_upload,
     is_yongfeng_image_download,
     is_yongfeng_multilabel_pack,
 )
@@ -47,6 +48,7 @@ from agent.yongfeng.scrap_align import (
     uploaded_to_path,
 )
 from agent.yongfeng.scrap_packager import pack_multilabel_from_disk as pack_yongfeng_multilabel
+from agent.yongfeng.scrap_uploader import upload_zips_for_dates
 from config.settings import settings
 
 logging.basicConfig(
@@ -905,6 +907,72 @@ def build_ui() -> gr.Blocks:
                 xlsx, pptx, imgs = _scan_latest_artifacts()
                 yield history, session, xlsx, pptx, imgs, None
 
+        def upload_yongfeng_handler(message, history, session, save_dir):
+            """永锋 datasets/ zip 上传到金睛平台（单独指令，逐日流式汇报）。"""
+            history = _normalize_chat_history(history)
+            dest = (save_dir or "").strip() or _parse_save_path(message)
+            dates = parse_yongfeng_dates(message)
+            xlsx, pptx, imgs = _scan_latest_artifacts()
+            if not dest:
+                history.append({
+                    "role": "assistant",
+                    "content": (
+                        "请先在左侧填写「图像保存路径」（与下载时同一个目录），"
+                        "再发送上传指令。程序会上传该目录下 <日期>/datasets/ 里的 zip。"
+                    ),
+                })
+                yield history, session, xlsx, pptx, imgs, None
+                return
+            if not dates:
+                history.append({
+                    "role": "assistant",
+                    "content": (
+                        "请写明要上传的日期，例如：\n"
+                        "上传 2026-09-01 的【永锋】数据集；\n"
+                        "上传 2026-08-31、2026-09-01 的【永锋】数据集。"
+                    ),
+                })
+                yield history, session, xlsx, pptx, imgs, None
+                return
+
+            date_label = "、".join(dates)
+            history.append({
+                "role": "assistant",
+                "content": (
+                    f"📤 开始上传 {date_label} 的【永锋】数据集 zip 到金睛平台\n"
+                    f"（pre-athena-mv.cisdigital.cn，无标注模式导入）\n"
+                    f"目录：{dest}\n"
+                    "每个 zip 上传后会自动建导入任务并等待结果。"
+                ),
+            })
+            yield history, session, xlsx, pptx, imgs, None
+
+            lines = [history[-1]["content"]]
+            totals = {"uploaded": 0, "skipped": 0, "failed": 0}
+            try:
+                for date in dates:
+                    result = upload_zips_for_dates(dest, dates=[date])
+                    totals["uploaded"] += int(result.get("uploaded") or 0)
+                    totals["skipped"] += int(result.get("skipped") or 0)
+                    totals["failed"] += int(result.get("failed") or 0)
+                    lines.append(f"\n【{date}】")
+                    lines.extend(result.get("lines") or [])
+                    history[-1]["content"] = "\n".join(lines[-80:])
+                    xlsx, pptx, imgs = _scan_latest_artifacts()
+                    yield history, session, xlsx, pptx, imgs, None
+                lines.append(
+                    f"\n全部日期处理完成：成功 {totals['uploaded']} 个，"
+                    f"跳过 {totals['skipped']} 个，失败 {totals['failed']} 个。"
+                )
+                history[-1]["content"] = "\n".join(lines[-80:])
+                xlsx, pptx, imgs = _scan_latest_artifacts()
+                yield history, session, xlsx, pptx, imgs, None
+            except Exception as exc:
+                lines.append(f"❌ 上传中断：{exc}")
+                history[-1]["content"] = "\n".join(lines[-80:])
+                xlsx, pptx, imgs = _scan_latest_artifacts()
+                yield history, session, xlsx, pptx, imgs, None
+
         # ========== 其他功能处理器（普通）==========
         def align_manual_handler(message, history, session, manual_upload):
             history = _normalize_chat_history(history)
@@ -1022,6 +1090,11 @@ def build_ui() -> gr.Blocks:
             elif is_shenglong_multilabel_pack(user_message):
                 for result in pack_multilabel_handler(
                     user_message, history, session, save_dir, yongfeng=False
+                ):
+                    yield result
+            elif is_yongfeng_dataset_upload(user_message):
+                for result in upload_yongfeng_handler(
+                    user_message, history, session, save_dir
                 ):
                     yield result
             elif is_yongfeng_image_download(user_message):

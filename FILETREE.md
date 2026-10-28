@@ -84,6 +84,7 @@ BriefMe_Agent/
 │   │   ├── scrap_naming.py
 │   │   ├── scrap_packager.py
 │   │   ├── scrap_remote_sync.py
+│   │   ├── scrap_uploader.py          #   datasets/ zip 上传金睛平台（登录→搜索→MinIO直传→导入任务）
 │   │   └── output/                    #   准确率报表 JSON 中间结果（运行时生成）
 │   │       ├── accuracy_report_computed.json
 │   │       └── accuracy_report_raw.json
@@ -115,6 +116,7 @@ BriefMe_Agent/
 │   ├── test_yongfeng_download.py
 │   ├── test_yongfeng_scrap_align.py
 │   ├── test_yongfeng_unit.py
+│   ├── test_yongfeng_upload.py
 │   └── test_yongyou_unit.py
 │
 ├── tools/                             # 独立运维 / 导出脚本
@@ -149,7 +151,7 @@ BriefMe_Agent/
 ├── app.py                             # ★ Gradio Web UI 入口（五档界面：主题/品牌栏+VPN灯/分栏/预设prompt/产物下载面板）
 ├── BriefMe使用手册.md                 # 用户操作手册
 ├── Readme.md                          # 项目说明（场景规则、VPN 前置、指令示例）
-├── requirements.txt                   # Python 依赖（gradio / zhipuai / httpx / openpyxl / python-pptx 等）
+├── requirements.txt                   # Python 依赖（gradio / zhipuai / httpx / openpyxl / python-pptx / boto3 等）
 ├── deduction_exclusion_log.json       # 扣分/剔除规则命中日志（运行时追加）
 ├── 废钢每日检判统计步骤-垣泰终版.docx  # 现场操作文档（二进制）
 └── 永锋钢卷打包带_操作文档.doc         # 现场操作文档（二进制）

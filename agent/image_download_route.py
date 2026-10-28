@@ -61,6 +61,30 @@ def is_dual_plant_image_or_pack_request(message: str) -> bool:
     )
 
 
+def is_yongfeng_dataset_upload(message: str) -> bool:
+    """永锋 datasets/ zip 上传到金睛平台（单独指令触发，不与下载混淆）。
+
+    命中示例：「上传 2026-09-01 的【永锋】数据集」
+              「把永锋数据集 zip 上传到金睛平台」
+    不命中：含「下载/检判原图/智能判级照片」的指令先走下载；
+    「下载并上传」这类混合指令也归下载，等下完再单独发上传指令。
+    """
+    if not _has_yongfeng(message):
+        return False
+    if is_yongfeng_multilabel_pack(message) or mentions_both_plants(message):
+        return False
+    if "上传" not in message and "导入" not in message:
+        return False
+    if "下载" in message or "检判原图" in message or "智能判级照片" in message:
+        return False
+    return (
+        "数据集" in message
+        or "金睛" in message
+        or "压缩包" in message
+        or "zip" in message.lower()
+    )
+
+
 def is_yongfeng_image_download(message: str) -> bool:
     if is_yongfeng_multilabel_pack(message) or mentions_both_plants(message):
         return False

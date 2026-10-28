@@ -31,6 +31,9 @@ from agent.yongfeng.scrap_align import (
     align_manual_file as align_yongfeng_scrap_manual,
     format_align_summary as format_yongfeng_align_summary,
 )
+from agent.yongfeng.scrap_uploader import (
+    upload_zips_for_dates as upload_yongfeng_zips_for_dates,
+)
 from agent.tools import TOOLS
 from agent.vpn_manager import VPNManager
 from config.settings import settings
@@ -212,6 +215,14 @@ def _build_system_prompt() -> str:
         "用户说确认打包永锋多标签时，告诉他这一步已取消，不要调用打包工具。\n"
         "12. 用户只说【检判原图】而未指明盛隆或永锋\n"
         "   → 必须反问：『请问是【盛隆检判原图】还是【永锋检判原图】？两个钢厂数据独立。』\n"
+        "13. 用户单独说【上传永锋数据集 / 把永锋数据集上传到金睛平台 / 导入永锋数据集】\n"
+        "   → 走 upload_yongfeng_datasets。把 <保存路径>/<日期>/datasets/ 里的 zip 上传到"
+        "金睛平台（pre-athena-mv.cisdigital.cn）的永锋数据集，无标注模式导入。\n"
+        "   zip 按前缀匹配数据集（重废1_*.zip→永锋-重废1），同料型实例/边缘包内容相同只传一个，"
+        "平均料型包会自动跳过并在总结里报告。\n"
+        "   含【下载/检判原图/智能判级照片】或「下载并上传」的指令不要走本条，先走下载；"
+        "等下载结束用户再单独发上传指令时才调用本工具。\n"
+        "   必须带保存路径（与下载时同一目录）；dates 填日期数组，不要当成区间补中间天。\n"
         "路由错误会引发严重现场事故，请严格遵守。\n\n"
         f"今天是{today.strftime('%Y-%m-%d')}，"
         f"昨天是{yesterday.strftime('%Y-%m-%d')}，"
@@ -887,6 +898,12 @@ class SteelCoilAgent:
                 end_date=args.get("end_date", ""),
                 output_dir=args.get("output_dir") or None,
                 dates=args.get("dates"),
+            )
+
+        if func_name == "upload_yongfeng_datasets":
+            return self._tool_upload_yongfeng_datasets(
+                dates=args.get("dates") or [],
+                output_dir=args.get("output_dir") or None,
             )
 
         if func_name == "yongfeng_align_scrap_manual":
@@ -1764,6 +1781,47 @@ class SteelCoilAgent:
             "output_dir": result.get("output_dir"),
             "zip_files": zips,
             "success": result.get("success", 0),
+            "failed": result.get("failed", 0),
+        }
+
+    def _tool_upload_yongfeng_datasets(
+        self,
+        dates: Optional[List[str]] = None,
+        output_dir: str = None,
+    ) -> Dict[str, Any]:
+        """把 <保存路径>/<日期>/datasets/ 的 zip 上传到金睛平台永锋数据集。"""
+        dest = (
+            output_dir
+            or self._default_yongfeng_output_dir
+            or self._default_shenglong_output_dir
+            or ""
+        ).strip()
+        if not dest:
+            return {
+                "summary_text": (
+                    "还缺保存路径（与下载时同一个目录）。请回复：\n"
+                    "保存地址：/Users/你的用户名/Desktop/永锋图像"
+                )
+            }
+        clean_dates = [str(d).strip() for d in (dates or []) if str(d).strip()]
+        if not clean_dates:
+            return {
+                "summary_text": (
+                    "请指定要上传的日期（对应 datasets 文件夹所在日期目录），"
+                    "格式 YYYY-MM-DD，例如：上传 2026-09-01 的【永锋】数据集。"
+                )
+            }
+        try:
+            result = upload_yongfeng_zips_for_dates(dest, dates=clean_dates)
+        except Exception as exc:
+            logger.error("永锋数据集上传失败: %s", exc)
+            return {"summary_text": f"❌ 上传失败: {exc}"}
+        return {
+            "summary_text": result.get("summary_text") or "\n".join(result.get("lines") or []),
+            "output_dir": result.get("output_dir"),
+            "dates": result.get("dates"),
+            "uploaded": result.get("uploaded", 0),
+            "skipped": result.get("skipped", 0),
             "failed": result.get("failed", 0),
         }
 

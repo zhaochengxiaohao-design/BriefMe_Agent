@@ -603,6 +603,39 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "upload_yongfeng_datasets",
+            "description": (
+                "【永锋数据集上传】把已下载产物 <保存路径>/<日期>/datasets/ 里的 zip 压缩包"
+                "上传到赛信金睛视觉AI开发平台（pre-athena-mv.cisdigital.cn）的永锋数据集。"
+                "zip 按前缀匹配数据集：重废1_*.zip→永锋-重废1、统料_*.zip→永锋-统料、"
+                "废钢分类数据集.zip→永锋-废钢分类；同料型的实例分割包和边缘分割包内容相同"
+                "只传一个；平均料型包平台没有对应数据集会跳过并报告。"
+                "无标注模式导入，每个 zip 传完自动建导入任务并等待结果。"
+                "仅当用户单独明确说【上传/导入】+【永锋】+【数据集/zip/压缩包/金睛平台】时调用；"
+                "下载原图时不要调用本工具；「下载并上传」也先只走下载。"
+                "dates 填日期数组（对应 datasets 文件夹所在的日期目录）；"
+                "output_dir 必须与下载时同一个保存路径，没有路径时传空字符串。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "dates": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "要上传的日期列表 YYYY-MM-DD，如 [\"2026-09-01\"]"
+                    },
+                    "output_dir": {
+                        "type": "string",
+                        "description": "本机保存目录的绝对路径，须与下载时同一路径"
+                    }
+                },
+                "required": ["dates"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "yongfeng_align_scrap_manual",
             "description": (
                 "【永锋废钢视觉/人工对齐】把用户选取的本地人工检判 xlsx，"

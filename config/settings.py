@@ -141,6 +141,42 @@ class YongfengScrapConfig(ShenglongConfig):
 
 
 @dataclass
+class YongfengDatasetUploadConfig:
+    """永锋废钢数据集上传（赛信金睛视觉AI开发平台）配置。
+
+    平台 http://pre-athena-mv.cisdigital.cn（namespace=1 机器视觉空间）。
+    把下载产物 <保存路径>/<日期>/datasets/ 里的 zip 上传到平台上的
+    永锋系列数据集（永锋-重废1 … 永锋-废钢分类）。zip 内只有 images/
+    目录，走无标注模式导入（options 不带 annotation_format）。
+
+    链路（2026-10-28 用 intern1 真机验证）：
+      POST /api/auth/login/ → JWT
+      GET  /api/devel/datasets/?name=<数据集名>&… → 数据集 id
+      GET  /api/devel/datasets/<id>/upload/ → MinIO STS 临时密钥 + key
+      PUT  {endpoint}/{bucket}/{key}（AWS SigV4 直传）
+      POST /api/devel/dataset-jobs/（type=1 导入任务，自动执行）
+      GET  /api/devel/dataset-jobs/<job_id>/ → status 2 运行中 / 3 成功
+
+    intern1 / liuzhaocheng2026 为团队共用账号，可用 .env 覆盖。
+    """
+
+    base_url: str = os.getenv(
+        "YONGFENG_UPLOAD_BASE_URL", "http://pre-athena-mv.cisdigital.cn"
+    )
+    username: str = os.getenv("YONGFENG_UPLOAD_USERNAME", "intern1")
+    password: str = os.getenv("YONGFENG_UPLOAD_PASSWORD", "liuzhaocheng2026")
+    namespace: int = int(os.getenv("YONGFENG_UPLOAD_NAMESPACE", "1"))
+    # 目标数据集名 = dataset_name_prefix + zip 前缀（重废1 → 永锋-重废1）
+    dataset_name_prefix: str = "永锋-"
+    dataset_search_keyword: str = "永锋"
+    login_timeout: float = 15.0
+    request_timeout: float = 30.0
+    minio_timeout: float = 1800.0
+    job_poll_interval: float = 5.0
+    job_poll_max_attempts: int = 120
+
+
+@dataclass
 class VPNConfig:
     """aTrust VPN 配置"""
 
@@ -200,6 +236,9 @@ class Settings:
     scrap: ScrapConfig = field(default_factory=ScrapConfig)
     shenglong: ShenglongConfig = field(default_factory=ShenglongConfig)
     yongfeng_scrap: YongfengScrapConfig = field(default_factory=YongfengScrapConfig)
+    yongfeng_upload: YongfengDatasetUploadConfig = field(
+        default_factory=YongfengDatasetUploadConfig
+    )
     analysis_token: str = os.getenv("ANALYSIS_TOKEN", "")
     analysis_api_code: str = os.getenv("ANALYSIS_API_CODE", "st2")
 
