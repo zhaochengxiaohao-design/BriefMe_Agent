@@ -172,6 +172,9 @@ class YongfengDatasetUploadConfig:
     login_timeout: float = 15.0
     request_timeout: float = 30.0
     minio_timeout: float = 1800.0
+    # 单个 zip 直传（MinIO PUT）墙钟上限：直传有概率卡死，超过就终止
+    # 该上传，先传其他 zip，全部传完后统一重试（默认 5 分钟）。
+    upload_timeout: float = 300.0
     job_poll_interval: float = 5.0
     job_poll_max_attempts: int = 120
 

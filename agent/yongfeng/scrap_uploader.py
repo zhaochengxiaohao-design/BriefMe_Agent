@@ -22,10 +22,19 @@
   平均料型_实例分割数据集.zip → 平台没有「永锋-平均料型」，跳过并报告
 导入只用无标注模式（options 不带 annotation_format）；先传 zip 再由
 程序显式建导入任务（手动导入）。单条失败不中断，全部进总结。
+
+防重与监督：
+- 平台不去重（重复导入会叠图）：每次成功导入记进
+  <日期>/datasets/uploaded.txt，重跑时已成功的 zip 自动跳过
+- MinIO 直传有概率卡死：超过 upload_timeout（默认 5 分钟）就终止该
+  上传，先传其他 zip，全部传完后统一重试一次
+- 程序标记失败时同步终止平台上的任务
+  （POST devel/dataset-jobs/<id>/stop/，幂等），避免同入口冲突
 """
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -44,6 +53,45 @@ EDGE_SUFFIX = "_边缘分割数据集.zip"
 AVERAGE_PREFIX = "平均料型"
 # 平台导入页限制：单文件最大 10GB
 MAX_ZIP_BYTES = 10 * 1024**3
+# 成功导入记录（平台不去重，重复导入会叠图；靠本地记录避免重复）
+RECORD_FILE_NAME = "uploaded.txt"
+
+
+def _load_uploaded_names(datasets_dir: Path) -> set:
+    """读 <日期>/datasets/uploaded.txt，返回已成功导入的 zip 文件名集合。
+
+    每行格式：zip文件名<TAB>数据集名<TAB>任务号<TAB>时间。
+    """
+    record = datasets_dir / RECORD_FILE_NAME
+    if not record.is_file():
+        return set()
+    names = set()
+    try:
+        for line in record.read_text(encoding="utf-8").splitlines():
+            first = line.split("\t")[0].strip()
+            if first:
+                names.add(first)
+    except OSError as exc:
+        logger.warning("读取上传记录 %s 失败: %s", record, exc)
+    return names
+
+
+def _record_success(zip_path: Path, dataset_name: str, job_id: Optional[int]) -> None:
+    """把一次成功导入追加进 zip 所在 datasets/ 的 uploaded.txt。"""
+    record = zip_path.parent / RECORD_FILE_NAME
+    line = "\t".join(
+        [
+            zip_path.name,
+            dataset_name,
+            f"任务 {job_id if job_id is not None else '-'}",
+            time.strftime("%Y-%m-%d %H:%M:%S"),
+        ]
+    )
+    try:
+        with record.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError as exc:
+        logger.warning("写入上传记录 %s 失败: %s", record, exc)
 
 
 class YongfengUploadError(Exception):
@@ -59,6 +107,35 @@ class EntryBusyError(YongfengUploadError):
     def __init__(self, job_id: int):
         super().__init__(f"平台任务 {job_id} 仍在运行，不抢入口")
         self.job_id = int(job_id)
+
+
+def _run_with_deadline(fn, timeout: float, label: str) -> None:
+    """在守护线程里执行 fn，主线程最多等 timeout 秒（超时监督）。
+
+    用于 MinIO 直传这类有概率卡死的调用：超过 timeout 秒没有结果就
+    抛 YongfengUploadError 终止该次调用（守护线程放弃，不阻塞进程），
+    由上层暂存到最后统一重试；fn 自身抛错则原样转抛。
+    """
+    done = threading.Event()
+    errors: List[BaseException] = []
+
+    def _worker() -> None:
+        try:
+            fn()
+        except BaseException as exc:  # noqa: BLE001 线程内异常转抛主线程
+            errors.append(exc)
+        finally:
+            done.set()
+
+    worker = threading.Thread(target=_worker, daemon=True, name=label)
+    worker.start()
+    # +1 秒余量：让 fn 内部的墙钟回调先有机会触发
+    if not done.wait(timeout + 1.0):
+        raise YongfengUploadError(
+            f"{label} 超过 {timeout:.0f} 秒无结果，终止该上传（先传其他，最后统一重试）"
+        )
+    if errors:
+        raise errors[0]
 
 
 @dataclass
@@ -325,31 +402,57 @@ class AthenaClient:
         return data
 
     def put_zip_to_minio(self, signature: Dict[str, str], zip_path: Path) -> None:
-        """用 STS 临时密钥把 zip 直传 MinIO（AWS SigV4）。"""
+        """用 STS 临时密钥把 zip 直传 MinIO（AWS SigV4），带超时监督。
+
+        直传有概率卡死：超过 cfg.upload_timeout（默认 5 分钟）就终止该
+        上传（先传其他 zip，最后统一重试）。回调里再挂一道墙钟保险，
+        双保险覆盖「有进度但太慢」和「完全卡死」两种情况。
+        """
         import boto3
         from botocore.client import Config
 
-        s3 = boto3.client(
-            "s3",
-            endpoint_url=signature["endpoint"],
-            aws_access_key_id=signature["access_key"],
-            aws_secret_access_key=signature["secret_key"],
-            aws_session_token=signature.get("session_token") or None,
-            region_name=signature.get("region") or "us-east-1",
-            config=Config(
-                signature_version="s3v4",
-                s3={"addressing_style": "path"},
-                connect_timeout=30,
-                read_timeout=self.cfg.minio_timeout,
-                retries={"max_attempts": 2},
-            ),
-        )
-        s3.upload_file(
-            str(zip_path),
-            signature["bucket"],
-            signature["key"],
-        )
+        timeout = float(self.cfg.upload_timeout)
+        deadline = time.monotonic() + timeout
+
+        def _upload() -> None:
+            def _guard(bytes_sent: int) -> None:
+                if time.monotonic() > deadline:
+                    raise YongfengUploadError(
+                        f"zip 直传超过 {timeout:.0f} 秒，终止该上传（先传其他，最后统一重试）"
+                    )
+
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=signature["endpoint"],
+                aws_access_key_id=signature["access_key"],
+                aws_secret_access_key=signature["secret_key"],
+                aws_session_token=signature.get("session_token") or None,
+                region_name=signature.get("region") or "us-east-1",
+                config=Config(
+                    signature_version="s3v4",
+                    s3={"addressing_style": "path"},
+                    connect_timeout=30,
+                    read_timeout=self.cfg.minio_timeout,
+                    retries={"max_attempts": 2},
+                ),
+            )
+            s3.upload_file(
+                str(zip_path),
+                signature["bucket"],
+                signature["key"],
+                Callback=_guard,
+            )
+
+        _run_with_deadline(_upload, timeout, f"minio-put:{zip_path.name}")
         logger.info("zip 已直传 MinIO: %s/%s/%s", signature["bucket"], signature["key"], zip_path.name)
+
+    def stop_job(self, dataset_id: int, job_id: int) -> None:
+        """终止平台上的导入任务（devel/dataset-jobs/<id>/stop/）。
+
+        已完成/已取消的任务再停止是幂等的（实测返回 200 success）。
+        """
+        self._post(f"devel/dataset-jobs/{job_id}/stop/", {"dataset": dataset_id})
+        logger.info("已终止平台任务 %s（数据集 %s）", job_id, dataset_id)
 
     def create_import_job(self, dataset_id: int, key: str) -> int:
         """建数据集导入任务（无标注模式：options 只有 mode=1）。"""
@@ -429,6 +532,8 @@ def upload_one_zip(plan: ZipPlan, client: AthenaClient) -> UploadItem:
         return item
     item.status = "uploaded"
     item.message = "导入成功"
+    # 平台不去重（重复导入会叠图）：成功一条记一条，重跑时跳过
+    _record_success(zip_path, plan.dataset_name, job_id)
     return item
 
 
@@ -452,6 +557,8 @@ def upload_day_zips(
     deferred = deferred if deferred is not None else []
     datasets_dir = day_dir / "datasets"
     plans = plan_day_zips(datasets_dir)
+    # 已成功导入的 zip（uploaded.txt）：平台不去重，重跑时跳过
+    uploaded_names = _load_uploaded_names(datasets_dir)
     items: List[UploadItem] = []
     for plan in plans:
         if plan.skip:
@@ -461,6 +568,19 @@ def upload_day_zips(
                     dataset_name=plan.dataset_name,
                     status="skipped",
                     message=plan.reason,
+                )
+            )
+            continue
+        if plan.zip_path.name in uploaded_names:
+            items.append(
+                UploadItem(
+                    zip=str(plan.zip_path),
+                    dataset_name=plan.dataset_name,
+                    status="skipped",
+                    message=(
+                        f"已成功导入过（{RECORD_FILE_NAME} 有记录），跳过；"
+                        "平台不去重，避免重复叠图"
+                    ),
                 )
             )
             continue
@@ -558,6 +678,32 @@ def _discover_dataset_dates(output_dir: Path) -> List[str]:
     return dates
 
 
+def _stop_platform_job(
+    client: AthenaClient,
+    dataset_name: str,
+    dataset_id: Optional[int],
+    job_id: Optional[int],
+) -> bool:
+    """程序标记失败时，同步终止平台上的对应任务，避免同入口冲突。
+
+    尽力而为：终止失败只记日志，不影响总结；没有任务号则跳过。
+    dataset_id 缺失时按名称现查一次。
+    """
+    if not job_id:
+        return False
+    try:
+        if dataset_id is None:
+            dataset_id = client.search_dataset_id(dataset_name)
+        if dataset_id is None:
+            logger.warning("找不到数据集 %s，无法终止平台任务 %s", dataset_name, job_id)
+            return False
+        client.stop_job(dataset_id, job_id)
+        return True
+    except Exception as exc:  # noqa: BLE001 终止失败不影响总结
+        logger.warning("终止平台任务 %s 失败: %s", job_id, exc)
+        return False
+
+
 def _retry_deferred(
     deferred: List[PendingRetry],
     client: AthenaClient,
@@ -565,7 +711,8 @@ def _retry_deferred(
     """最后统一重试首轮没传上的 zip（每条只重试一次）。
 
     重试前先重查占用入口的任务：仍在跑就不抢入口（避免中断）；
-    自己的任务其实已经成功，则直接记成功，不必重传。
+    自己的任务其实已经成功，则直接记成功，不必重传。重试仍失败
+    的，顺手把平台上的任务终止掉，避免下一轮指令和它冲突。
     """
     retry_items: List[UploadItem] = []
     for pend in deferred:
@@ -574,11 +721,14 @@ def _retry_deferred(
             if pend.blocking_job_id:
                 status = client.get_job_status(pend.blocking_job_id).get("status")
                 if status == 2:
+                    stopped = _stop_platform_job(
+                        client, pend.plan.dataset_name, None, pend.blocking_job_id
+                    )
                     item.status = "failed"
                     item.job_id = pend.blocking_job_id
                     item.message = (
-                        f"重试时平台上任务 {pend.blocking_job_id} 仍在运行，"
-                        "本轮不抢入口（避免中断），请稍后重发指令补传"
+                        f"重试时平台上任务 {pend.blocking_job_id} 仍在运行，本轮不抢入口"
+                        f"{'，已终止平台任务' if stopped else ''}，请稍后重发指令补传"
                     )
                     retry_items.append(item)
                     continue
@@ -587,6 +737,9 @@ def _retry_deferred(
                     item.status = "uploaded"
                     item.job_id = pend.blocking_job_id
                     item.message = "首轮超时的任务重查确认已导入成功"
+                    _record_success(
+                        Path(pend.plan.zip_path), pend.plan.dataset_name, pend.blocking_job_id
+                    )
                     retry_items.append(item)
                     continue
                 # 任务已结束（成功/失败）→ 入口空闲，重新上传
@@ -594,8 +747,23 @@ def _retry_deferred(
             if retry_item.status == "uploaded":
                 retry_item.message = "重试导入成功"
             else:
+                if retry_item.job_id:
+                    # 重试后导入任务仍未确认完成：终止平台任务，避免下一轮冲突
+                    stopped = _stop_platform_job(
+                        client,
+                        pend.plan.dataset_name,
+                        retry_item.dataset_id,
+                        retry_item.job_id,
+                    )
+                    if stopped:
+                        retry_item.message += "，已终止平台任务"
                 retry_item.message = f"重试仍失败：{retry_item.message}"
             retry_items.append(retry_item)
+        except EntryBusyError as exc:
+            stopped = _stop_platform_job(client, pend.plan.dataset_name, None, exc.job_id)
+            item.status = "failed"
+            item.message = f"重试仍失败：{exc}{'，已终止平台任务' if stopped else ''}"
+            retry_items.append(item)
         except Exception as exc:  # noqa: BLE001 重试失败即最终失败
             logger.warning("重试上传 %s 失败: %s", pend.plan.zip_path.name, exc)
             item.status = "failed"

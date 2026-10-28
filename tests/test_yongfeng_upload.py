@@ -118,6 +118,9 @@ class _FakeClient(AthenaClient):
         self.calls.append(f"busy:{dataset_id}")
         return None
 
+    def stop_job(self, dataset_id: int, job_id: int) -> None:
+        self.calls.append(f"stop:{dataset_id}:{job_id}")
+
     def get_upload_signature(self, dataset_id: int) -> Dict[str, str]:
         self.calls.append(f"signature:{dataset_id}")
         return {
@@ -287,8 +290,9 @@ def test_retry_round_gives_up_when_platform_job_still_running():
         _mkzip(root / "2026-09-01" / "datasets", "重废1_实例分割数据集.zip")
         _mkzip(root / "2026-09-02" / "datasets", "重废1_实例分割数据集.zip")
         _mkzip(root / "2026-09-02" / "datasets", "废钢分类数据集.zip")
+        client = _StuckStillRunningClient()
         result = upload_zips_for_dates(
-            str(root), dates=["2026-09-01", "2026-09-02"], client=_StuckStillRunningClient()
+            str(root), dates=["2026-09-01", "2026-09-02"], client=client
         )
         assert result["uploaded"] == 1   # 09-02 废钢分类
         assert result["failed"] == 2     # 两天重废1：任务仍在运行，不抢入口
@@ -297,8 +301,10 @@ def test_retry_round_gives_up_when_platform_job_still_running():
         assert "【统一重试】" in text
         assert "仍在运行" in text
         assert "不抢入口" in text
-        # 重试时没有再直传（put 只有首轮 09-01 一次）
-        # client 未保留引用，这里靠 failed message 断言即可
+        # 标记失败时同步终止平台任务（两条失败都终止了任务 1001）
+        stops = [c for c in client.calls if c.startswith("stop:")]
+        assert stops == ["stop:42:1001", "stop:42:1001"]
+        assert "已终止平台任务" in text
     print("retry gives up when still running OK")
 
 
@@ -402,10 +408,69 @@ def test_cross_run_busy_entry_waits_not_interrupts():
         text = result["summary_text"]
         assert "首轮入口被占" in text
         assert "任务 23700 仍在运行" in text
+        # 标记失败时终止了平台上残留的任务
+        stops = [c for c in client.calls if c.startswith("stop:")]
+        assert stops == ["stop:42:23700"]
+        assert "已终止平台任务" in text
         # 全程没有直传、没有建新任务（不会把平台上的任务顶掉）
         assert "put" not in client.calls
         assert not any(c.startswith("job:") for c in client.calls)
     print("cross-run busy entry OK")
+
+
+def test_run_with_deadline_supervision():
+    """直传超时监督：超时抛 YongfengUploadError，快路径不受影响。"""
+    from agent.yongfeng.scrap_uploader import _run_with_deadline
+    import time as _time
+
+    # 快速完成：不超时
+    _run_with_deadline(lambda: None, 1.0, "fast")
+    # 卡死（远超时限）：抛错且很快返回
+    t0 = _time.monotonic()
+    try:
+        _run_with_deadline(lambda: _time.sleep(30), 0.2, "hung")
+        raise AssertionError("应当超时")
+    except YongfengUploadError as exc:
+        assert "终止该上传" in str(exc)
+    assert _time.monotonic() - t0 < 5
+    # fn 自身抛错：原样转抛
+    def _boom():
+        raise RuntimeError("网络中断")
+    try:
+        _run_with_deadline(_boom, 1.0, "boom")
+        raise AssertionError("应当转抛")
+    except RuntimeError:
+        pass
+    print("run_with_deadline supervision OK")
+
+
+def test_uploaded_record_prevents_duplicate_import():
+    """平台不去重：成功导入记进 datasets/uploaded.txt，重跑自动跳过。"""
+    from agent.yongfeng.scrap_uploader import upload_zips_for_dates, RECORD_FILE_NAME
+    from pathlib import Path as P
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as td:
+        root = P(td)
+        d = root / "2026-09-01" / "datasets"
+        _mkzip(d, "废钢分类数据集.zip")
+        client = _FakeClient(dataset_id=42)
+        r1 = upload_zips_for_dates(str(root), dates=["2026-09-01"], client=client)
+        assert r1["uploaded"] == 1
+        record = d / RECORD_FILE_NAME
+        assert record.is_file()
+        content = record.read_text(encoding="utf-8")
+        assert "废钢分类数据集.zip" in content
+        assert "永锋-废钢分类" in content
+        assert "任务 1001" in content
+        # 重跑同一日期：有记录 → 跳过，不再直传/建任务
+        r2 = upload_zips_for_dates(str(root), dates=["2026-09-01"], client=client)
+        assert r2["uploaded"] == 0
+        assert r2["skipped"] == 1
+        assert "已成功导入过" in r2["summary_text"]
+        assert client.calls.count("put") == 1  # 只直传过一次
+        assert len([c for c in client.calls if c.startswith("job:")]) == 1
+    print("uploaded record dedup OK")
 
 
 def test_route_upload_directive():
@@ -437,6 +502,8 @@ def main():
     test_retry_round_rechecks_own_job_and_recovers()
     test_first_round_network_error_retries_once()
     test_cross_run_busy_entry_waits_not_interrupts()
+    test_run_with_deadline_supervision()
+    test_uploaded_record_prevents_duplicate_import()
     test_settings_upload_credentials()
     test_route_upload_directive()
     print("\nAll yongfeng upload tests PASSED")
