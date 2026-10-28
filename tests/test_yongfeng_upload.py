@@ -114,6 +114,10 @@ class _FakeClient(AthenaClient):
         self.calls.append(f"search:{dataset_name}")
         return self.dataset_id
 
+    def find_running_import_job(self, dataset_id: int) -> Optional[int]:
+        self.calls.append(f"busy:{dataset_id}")
+        return None
+
     def get_upload_signature(self, dataset_id: int) -> Dict[str, str]:
         self.calls.append(f"signature:{dataset_id}")
         return {
@@ -156,11 +160,12 @@ def test_upload_one_zip_success_flow():
         assert item.status == "uploaded"
         assert item.dataset_id == 42
         assert item.job_id == 1001
-        # 链路顺序：搜索 → 签名 → 直传 → 建任务 → 轮询
+        # 链路顺序：搜索 → 查在跑任务（跨指令防护）→ 签名 → 直传 → 建任务 → 轮询
         assert client.calls[0] == "search:永锋-重废1"
-        assert client.calls[1] == "signature:42"
-        assert client.calls[2] == "put"
-        assert client.calls[3] == "job:42:tmp/uploads/datasets/abc123"
+        assert client.calls[1] == "busy:42"
+        assert client.calls[2] == "signature:42"
+        assert client.calls[3] == "put"
+        assert client.calls[4] == "job:42:tmp/uploads/datasets/abc123"
         # 无标注模式：options 里不允许出现 annotation_format
         assert client.job_payload["config"]["options"] == {"mode": 1}
         assert "annotation_format" not in client.job_payload["config"]["options"]
@@ -365,6 +370,44 @@ def test_first_round_network_error_retries_once():
     print("first-round network error retry OK")
 
 
+def test_cross_run_busy_entry_waits_not_interrupts():
+    """重复发上传指令时：平台上别的会话/上一轮留下的在跑任务会被
+    先查到，不抢入口，暂存到统一重试；仍在跑就记失败让用户稍后补传。"""
+    from agent.yongfeng.scrap_uploader import upload_zips_for_dates
+    from pathlib import Path as P
+    import tempfile
+
+    class _ForeignJobRunningClient(_FakeClient):
+        """平台上残留一个在跑的导入任务 23700（别的会话留下）。"""
+
+        def __init__(self):
+            super().__init__(dataset_id=42, statuses=[2])
+            self.foreign_job = 23700
+
+        def find_running_import_job(self, dataset_id: int) -> Optional[int]:
+            self.calls.append(f"busy:{dataset_id}")
+            return self.foreign_job
+
+        def wait_job(self, job_id: int) -> Dict[str, Any]:
+            return {"status": 3}
+
+    with tempfile.TemporaryDirectory() as td:
+        root = P(td)
+        _mkzip(root / "2026-09-01" / "datasets", "重废1_实例分割数据集.zip")
+        client = _ForeignJobRunningClient()
+        result = upload_zips_for_dates(str(root), dates=["2026-09-01"], client=client)
+        # 首轮入口被占 → 暂存；重试轮重查任务 23700 仍在跑 → 不抢入口记失败
+        assert result["uploaded"] == 0
+        assert result["failed"] == 1
+        text = result["summary_text"]
+        assert "首轮入口被占" in text
+        assert "任务 23700 仍在运行" in text
+        # 全程没有直传、没有建新任务（不会把平台上的任务顶掉）
+        assert "put" not in client.calls
+        assert not any(c.startswith("job:") for c in client.calls)
+    print("cross-run busy entry OK")
+
+
 def test_route_upload_directive():
     assert is_yongfeng_dataset_upload("上传 2026-09-01 的【永锋】数据集")
     assert is_yongfeng_dataset_upload("把永锋数据集 zip 上传到金睛平台")
@@ -393,6 +436,7 @@ def main():
     test_retry_round_gives_up_when_platform_job_still_running()
     test_retry_round_rechecks_own_job_and_recovers()
     test_first_round_network_error_retries_once()
+    test_cross_run_busy_entry_waits_not_interrupts()
     test_settings_upload_credentials()
     test_route_upload_directive()
     print("\nAll yongfeng upload tests PASSED")

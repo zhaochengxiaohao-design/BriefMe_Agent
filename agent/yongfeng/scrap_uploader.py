@@ -50,6 +50,17 @@ class YongfengUploadError(Exception):
     """永锋数据集上传链路错误。"""
 
 
+class EntryBusyError(YongfengUploadError):
+    """平台该数据集入口还有导入任务在跑（可能是别的会话留下的）。
+
+    同一入口并发上传/导入会中断之前的，先暂存到最后统一重试。
+    """
+
+    def __init__(self, job_id: int):
+        super().__init__(f"平台任务 {job_id} 仍在运行，不抢入口")
+        self.job_id = int(job_id)
+
+
 @dataclass
 class ZipPlan:
     """一个 zip 的上传计划。"""
@@ -281,6 +292,30 @@ class AthenaClient:
                 return int(it["id"])
         return None
 
+    def find_running_import_job(self, dataset_id: int) -> Optional[int]:
+        """查该数据集入口有没有仍在运行的导入任务（跨指令防护）。
+
+        返回在跑任务 id；没有则 None。别的会话/上一轮超时留下的任务
+        也会被查到，避免新一轮把平台上还在跑的任务顶掉。
+        """
+        body = self._get(
+            "devel/dataset-jobs/",
+            params={
+                "namespace": self.cfg.namespace,
+                "page": 1,
+                "page_size": 20,
+                "dataset": dataset_id,
+                "type": 1,
+                "status": 2,
+            },
+        )
+        items = body.get("data") or []
+        for it in items:
+            # 服务端已按 status=2 过滤，客户端再核对一次
+            if isinstance(it, dict) and it.get("status") == 2 and it.get("id"):
+                return int(it["id"])
+        return None
+
     def get_upload_signature(self, dataset_id: int) -> Dict[str, str]:
         """取 MinIO 直传签名（单文件 key 模式）。"""
         body = self._get(f"devel/datasets/{dataset_id}/upload/")
@@ -376,6 +411,11 @@ def upload_one_zip(plan: ZipPlan, client: AthenaClient) -> UploadItem:
         item.message = f"平台上没有数据集「{plan.dataset_name}」（按名称搜索无精确匹配），未上传"
         return item
     item.dataset_id = dataset_id
+    running_job = client.find_running_import_job(dataset_id)
+    if running_job:
+        # 平台同入口一次只能导入一个包：别的会话/上一轮留下的任务
+        # 还在跑时先不抢入口，交给统一重试轮处理。
+        raise EntryBusyError(running_job)
     signature = client.get_upload_signature(dataset_id)
     key = signature["key"]
     client.put_zip_to_minio(signature, zip_path)
@@ -444,6 +484,18 @@ def upload_day_zips(
             continue
         try:
             item = upload_one_zip(plan, client)
+        except EntryBusyError as exc:
+            logger.warning("上传 %s 首轮入口被占: %s", plan.zip_path.name, exc)
+            items.append(
+                UploadItem(
+                    zip=str(plan.zip_path),
+                    dataset_name=plan.dataset_name,
+                    status="retry_pending",
+                    message=f"首轮入口被占（{exc}），最后统一重试",
+                )
+            )
+            deferred.append(PendingRetry(plan, reason=str(exc), blocking_job_id=exc.job_id))
+            continue
         except Exception as exc:  # noqa: BLE001 首轮失败先暂存，最后统一重试
             logger.warning("上传 %s 首轮失败: %s", plan.zip_path.name, exc)
             items.append(
