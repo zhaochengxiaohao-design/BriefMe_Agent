@@ -15,6 +15,7 @@ from agent.image_download_route import is_yongfeng_dataset_upload
 from agent.yongfeng.scrap_uploader import (
     CLASSIFICATION_ZIP_NAME,
     INSTANCE_SUFFIX,
+    YongfengUploadError,
     AthenaClient,
     UploadItem,
     upload_one_zip,
@@ -211,6 +212,83 @@ def test_settings_upload_credentials():
     print("settings upload credentials OK")
 
 
+def test_same_dataset_entry_blocked_after_stuck_import():
+    """平台约束：同一数据集入口一次只能导入一个包。第一天导入未完成时，
+    第二天同入口的 zip 必须跳过，其他入口不受影响。"""
+    from agent.yongfeng.scrap_uploader import upload_day_zips, plan_day_zips
+    from pathlib import Path as P
+    import tempfile
+
+    class _StuckClient(_FakeClient):
+        def __init__(self):
+            super().__init__(dataset_id=42)
+            self._stuck_used = False
+
+        def wait_job(self, job_id: int) -> Dict[str, Any]:
+            if not self._stuck_used:
+                self._stuck_used = True
+                raise YongfengUploadError(f"导入任务 {job_id} 等待超时")
+            return {"status": 3}
+
+    with tempfile.TemporaryDirectory() as td:
+        root = P(td)
+        d1 = root / "2026-09-01" / "datasets"
+        _mkzip(d1, "重废1_实例分割数据集.zip")
+        d2 = root / "2026-09-02" / "datasets"
+        _mkzip(d2, "重废1_实例分割数据集.zip")
+        _mkzip(d2, "废钢分类数据集.zip")
+        client = _StuckClient()
+        blocked: set = set()
+        r1 = upload_day_zips(root / "2026-09-01", client=client, blocked_datasets=blocked)
+        assert r1["items"][0]["status"] == "failed"
+        assert r1["items"][0]["job_id"] == 1001  # 失败条目保留 job_id
+        blocked.add(r1["items"][0]["dataset_name"])
+        r2 = upload_day_zips(root / "2026-09-02", client=client, blocked_datasets=blocked)
+        by_name = {P(it["zip"]).name: it for it in r2["items"]}
+        # 同入口（永锋-重废1）被锁：跳过且不再直传
+        assert by_name["重废1_实例分割数据集.zip"]["status"] == "skipped"
+        assert "未完成" in by_name["重废1_实例分割数据集.zip"]["message"]
+        assert "search:永锋-重废1" not in client.calls[1:]  # 没有再搜索/直传
+        # 不同入口（永锋-废钢分类）不受影响，正常上传成功
+        assert by_name["废钢分类数据集.zip"]["status"] == "uploaded"
+    print("same-dataset entry lock OK")
+
+
+def test_upload_zips_for_dates_locks_stuck_entry_across_days():
+    """多日期编排：第一天重废1 导入超时 → 第二天重废1 自动跳过，
+    第二天废钢分类仍正常上传。"""
+    from agent.yongfeng.scrap_uploader import upload_zips_for_dates
+    from pathlib import Path as P
+    import tempfile
+
+    class _StuckOnceClient(_FakeClient):
+        def __init__(self):
+            super().__init__(dataset_id=42)
+            self._stuck_used = False
+
+        def wait_job(self, job_id: int) -> Dict[str, Any]:
+            if not self._stuck_used:
+                self._stuck_used = True
+                raise YongfengUploadError(f"导入任务 {job_id} 等待超时")
+            return {"status": 3}
+
+    with tempfile.TemporaryDirectory() as td:
+        root = P(td)
+        _mkzip(root / "2026-09-01" / "datasets", "重废1_实例分割数据集.zip")
+        _mkzip(root / "2026-09-02" / "datasets", "重废1_实例分割数据集.zip")
+        _mkzip(root / "2026-09-02" / "datasets", "废钢分类数据集.zip")
+        result = upload_zips_for_dates(
+            str(root), dates=["2026-09-01", "2026-09-02"], client=_StuckOnceClient()
+        )
+        assert result["failed"] == 1   # 09-01 重废1 超时
+        assert result["uploaded"] == 1  # 09-02 废钢分类
+        assert result["skipped"] == 1   # 09-02 重废1 被入口锁跳过
+        text = result["summary_text"]
+        assert "等待超时" in text
+        assert "已有未完成的导入任务" in text
+    print("cross-day entry lock OK")
+
+
 def test_route_upload_directive():
     assert is_yongfeng_dataset_upload("上传 2026-09-01 的【永锋】数据集")
     assert is_yongfeng_dataset_upload("把永锋数据集 zip 上传到金睛平台")
@@ -235,6 +313,8 @@ def main():
     test_upload_one_zip_success_flow()
     test_upload_one_zip_skips_when_dataset_missing()
     test_upload_zips_for_dates_aggregates()
+    test_same_dataset_entry_blocked_after_stuck_import()
+    test_upload_zips_for_dates_locks_stuck_entry_across_days()
     test_settings_upload_credentials()
     test_route_upload_directive()
     print("\nAll yongfeng upload tests PASSED")

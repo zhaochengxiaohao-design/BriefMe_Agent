@@ -359,7 +359,12 @@ def upload_one_zip(plan: ZipPlan, client: AthenaClient) -> UploadItem:
     client.put_zip_to_minio(signature, zip_path)
     job_id = client.create_import_job(dataset_id, key)
     item.job_id = job_id
-    client.wait_job(job_id)
+    try:
+        client.wait_job(job_id)
+    except Exception as exc:  # noqa: BLE001 导入未确认完成，保留 job_id 供入口锁
+        item.status = "failed"
+        item.message = str(exc)
+        return item
     item.status = "uploaded"
     item.message = "导入成功"
     return item
@@ -368,9 +373,16 @@ def upload_one_zip(plan: ZipPlan, client: AthenaClient) -> UploadItem:
 def upload_day_zips(
     day_dir: Path,
     client: Optional[AthenaClient] = None,
+    blocked_datasets: Optional[set] = None,
 ) -> Dict[str, Any]:
-    """上传一个日期目录 datasets/ 里的 zip。失败不中断，逐条汇总。"""
+    """上传一个日期目录 datasets/ 里的 zip。失败不中断，逐条汇总。
+
+    blocked_datasets：平台同一数据集入口一次只能上传/导入一个压缩包，
+    同时多个会中断之前的。若某入口已有未完成的导入任务，本轮跳过该
+    入口的后续 zip（不同入口互不影响，仍正常上传）。
+    """
     client = client or AthenaClient()
+    blocked = blocked_datasets if blocked_datasets is not None else set()
     datasets_dir = day_dir / "datasets"
     plans = plan_day_zips(datasets_dir)
     items: List[UploadItem] = []
@@ -382,6 +394,20 @@ def upload_day_zips(
                     dataset_name=plan.dataset_name,
                     status="skipped",
                     message=plan.reason,
+                )
+            )
+            continue
+        if plan.dataset_name in blocked:
+            items.append(
+                UploadItem(
+                    zip=str(plan.zip_path),
+                    dataset_name=plan.dataset_name,
+                    status="skipped",
+                    message=(
+                        "该数据集入口已有未完成的导入任务（平台同入口一次只能"
+                        "导入一个包，并发会中断之前的），本轮跳过；"
+                        "平台任务结束后重发指令即可补传"
+                    ),
                 )
             )
             continue
@@ -446,6 +472,9 @@ def upload_zips_for_dates(
         )
     report = UploadReport()
     day_reports: List[Dict[str, Any]] = []
+    # 平台约束：同一数据集入口一次只能上传/导入一个压缩包，并发会中断
+    # 之前的。记录「导入任务已创建但未确认完成」的入口，后续日期跳过。
+    blocked_datasets: set = set()
     for date in dates:
         day_dir = root / date
         if not (day_dir / "datasets").is_dir():
@@ -458,7 +487,7 @@ def upload_zips_for_dates(
             )
             day_reports.append({"day": date, "items": [], "lines": report.to_lines()[-1:]})
             continue
-        day_report = upload_day_zips(day_dir, client=client)
+        day_report = upload_day_zips(day_dir, client=client, blocked_datasets=blocked_datasets)
         day_reports.append(day_report)
         for it in day_report["items"]:
             report.items.append(
@@ -471,6 +500,10 @@ def upload_zips_for_dates(
                     message=it["message"],
                 )
             )
+            # 导入任务已建但没等到完成（超时/失败）→ 该入口可能仍有任务
+            # 在跑，锁住避免下一天的包把平台上的任务顶掉。
+            if it["job_id"] and it["status"] != "uploaded":
+                blocked_datasets.add(it["dataset_name"])
     lines = ["✅ 永锋数据集上传完成（金睛平台 pre-athena-mv）"]
     for day_report in day_reports:
         if day_report.get("lines"):
