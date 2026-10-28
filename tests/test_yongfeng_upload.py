@@ -39,6 +39,11 @@ def test_parse_zip_prefix():
     assert parse_zip_prefix("重废1_边缘分割数据集.zip") == "重废1"
     assert parse_zip_prefix("统料_实例分割数据集.zip") == "统料"
     assert parse_zip_prefix("统料1厚剪_边缘分割数据集.zip") == "统料1厚剪"
+    # 本地打包用全角罗马数字，平台数据集名用半角数字
+    assert parse_zip_prefix("统料Ⅰ_实例分割数据集.zip") == "统料1"
+    assert parse_zip_prefix("重废Ⅱ_边缘分割数据集.zip") == "重废2"
+    assert parse_zip_prefix("统料Ⅱ_实例分割数据集.zip") == "统料2"
+    assert parse_zip_prefix("重废Ⅲ_实例分割数据集.zip") == "重废3"
     assert parse_zip_prefix("平均料型_实例分割数据集.zip") == "平均料型"
     assert parse_zip_prefix("别的文件.zip") is None
     assert parse_zip_prefix("车次图片.zip") is None

@@ -214,11 +214,23 @@ class PendingRetry:
     own_job: bool = False
 
 
+def _normalize_prefix(prefix: str) -> str:
+    """全角罗马数字归一化：本地打包用 Ⅰ/Ⅱ/Ⅲ，平台数据集名用 1/2/3。"""
+    return (
+        prefix.replace("Ⅰ", "1")
+        .replace("Ⅱ", "2")
+        .replace("Ⅲ", "3")
+        .replace("Ⅳ", "4")
+        .replace("Ⅴ", "5")
+    )
+
+
 def parse_zip_prefix(zip_name: str) -> Optional[str]:
     """zip 文件名 → 目标数据集的「永锋-」后缀前缀。
 
     废钢分类数据集.zip → 废钢分类
     重废1_实例分割数据集.zip → 重废1
+    统料Ⅰ_实例分割数据集.zip → 统料1（全角罗马数字归一化为半角）
     重废1_边缘分割数据集.zip → 重废1
     解析不出（非 datasets 打包命名）返回 None。
     """
@@ -229,7 +241,7 @@ def parse_zip_prefix(zip_name: str) -> Optional[str]:
         if name.endswith(suffix):
             prefix = name[: -len(suffix)]
             if prefix:
-                return prefix
+                return _normalize_prefix(prefix)
     return None
 
 
