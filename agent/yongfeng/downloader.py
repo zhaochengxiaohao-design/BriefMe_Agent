@@ -461,6 +461,19 @@ def iter_download_images(
         raise ValueError("没有解析到有效日期，请使用 YYYY-MM-DD")
     output_root = resolve_output_dir(output_dir)
     writer = _ProgressWriter(output_root, progress_callback)
+    try:
+        yield from _iter_download_days(day_list, writer, include_missing_manual)
+    except (Exception, KeyboardInterrupt, GeneratorExit) as exc:
+        if writer.state["status"] == "running":
+            reason = str(exc) or "任务被中断"
+            writer.event(f"下载中断：{reason}", status="error", error=reason)
+        raise
+
+
+def _iter_download_days(
+    day_list: Sequence[str], writer: _ProgressWriter, include_missing_manual: bool
+) -> Iterator[dict]:
+    output_root = writer.output_root
     label = "、".join(day_list)
     writer.event(f"日期 {label}，保存到 {output_root}")
     yield {"type": "start", "message": f"开始下载 {label}", "output_dir": str(output_root)}
@@ -473,6 +486,7 @@ def iter_download_images(
 
     with YongfengScrapClient() as client:
         for cur in day_list:
+            writer.state.update(current_date=cur, current_truck="")
             records = _sorted_records(client.query_list_by_date(cur))
             day = DayDownloadResult(date=cur, total_trucks=len(records))
             pack_trucks: list[dict] = []

@@ -219,10 +219,10 @@ def _build_system_prompt() -> str:
         "13. 用户单独说【上传永锋数据集 / 把永锋数据集上传到金睛平台 / 导入永锋数据集】\n"
         "   → 走 upload_yongfeng_datasets。把 <保存路径>/<日期>/datasets/ 里的 zip 上传到"
         "金睛平台（pre-athena-mv.cisdigital.cn）的永锋数据集，无标注模式导入。\n"
-        "   zip 按前缀匹配数据集（重废1_*.zip→永锋-重废1），同料型实例/边缘包内容相同只传一个，"
+        "   zip 按开头的料型匹配数据集（重废1 开头的包→永锋-重废1），忽略后面的文件名，每个料型只选一份，"
         "平均料型包会自动跳过并在总结里报告。\n"
-        "   含【下载/检判原图/智能判级照片】或「下载并上传」的指令不要走本条，先走下载；"
-        "等下载结束用户再单独发上传指令时才调用本工具。\n"
+        "   用户要求上传已下载的检判原图时走本条。明确要求先下载再上传时先走下载，"
+        "等用户单独发送上传指令再调用本工具。\n"
         "   必须带保存路径（与下载时同一目录）；dates 填日期数组，不要当成区间补中间天。\n"
         "路由错误会引发严重现场事故，请严格遵守。\n\n"
         f"今天是{today.strftime('%Y-%m-%d')}，"
@@ -685,9 +685,7 @@ class SteelCoilAgent:
             return reply, session
 
         tool_names = [tc.function.name for tc in assistant_msg.tool_calls]
-        # 盛隆图像、永锋检判原图/多标签、镔鑫球机、用友图片不走打包带「视觉 API 配置」校验。
-        # 永锋检判原图与打包带同属永锋专网，单独走打包带连通性，避免把烧结/打包带接口 TODO 当成前置条件。
-        yongfeng_image_tool = any(n == "download_yongfeng_images" for n in tool_names)
+        # 永锋原图下载和金睛上传由各自的客户端检查连接。
         yongfeng_align_tool = any(n == "yongfeng_align_scrap_manual" for n in tool_names)
         any_packing_tool = any(
             not n.startswith("scrap_")
@@ -697,11 +695,12 @@ class SteelCoilAgent:
             and n != "download_shenglong_images"
             and n != "pack_shenglong_multilabel"
             and n != "download_yongfeng_images"
+            and n != "upload_yongfeng_datasets"
             and n != "yongfeng_align_scrap_manual"
             for n in tool_names
         )
 
-        if (any_packing_tool or yongfeng_image_tool or yongfeng_align_tool) and not self.vpn.check_connectivity():
+        if (any_packing_tool or yongfeng_align_tool) and not self.vpn.check_connectivity():
             session["vpn_state"] = "waiting_code"
             session["pending_query"] = message
             messages.pop()

@@ -71,7 +71,7 @@ class YongfengScrapClient:
         self.session.cookies.set(name, token)
 
     def login(self) -> None:
-        last_err: Exception | None = None
+        last_err = ""
         for attempt in range(1, LOGIN_RETRIES + 1):
             try:
                 resp = self.session.post(
@@ -85,18 +85,23 @@ class YongfengScrapClient:
                 resp.raise_for_status()
                 body = resp.json()
                 if not (body.get("meta") or {}).get("success"):
-                    raise RuntimeError(f"永锋登录失败: {body}")
+                    raise RuntimeError("永锋接口拒绝登录")
                 self.token = _token_from_login(
                     body, self._cookie_value(self.cfg.cookie_name)
                 )
                 if not self.token:
                     raise RuntimeError("永锋登录成功但未返回 token / satoken")
                 self._set_auth_cookie(self.token)
-                logger.info("永锋废钢系统登录成功 token=%s…", self.token[:8])
+                logger.info("永锋废钢系统登录成功")
                 return
             except Exception as exc:  # noqa: BLE001
-                last_err = exc
-                logger.warning("永锋登录尝试 %d/%d 失败: %s", attempt, LOGIN_RETRIES, exc)
+                # requests 的原始错误可能带上包含登录凭据的查询字符串。
+                if isinstance(exc, requests.RequestException):
+                    status = getattr(getattr(exc, "response", None), "status_code", None)
+                    last_err = f"HTTP {status}" if status is not None else type(exc).__name__
+                else:
+                    last_err = str(exc)
+                logger.warning("永锋登录尝试 %d/%d 失败: %s", attempt, LOGIN_RETRIES, last_err)
                 if attempt < LOGIN_RETRIES:
                     time.sleep(LOGIN_RETRY_DELAY)
         raise RuntimeError(f"永锋登录失败（已重试{LOGIN_RETRIES}次）: {last_err}")

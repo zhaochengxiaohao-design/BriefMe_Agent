@@ -513,6 +513,7 @@ CUSTOM_CSS = """
 # =====================================================================
 def build_ui() -> gr.Blocks:
     q = _quick_prompts()
+    yongfeng_image_section = ("永锋钢铁", "检判原图上传下载")
 
     def _update_businesses(project):
         first_business = next(iter(q[project]))
@@ -597,6 +598,8 @@ def build_ui() -> gr.Blocks:
                     )
 
                 def _update_commands(project, business):
+                    if (project, business) == yongfeng_image_section:
+                        return gr.skip(), gr.skip()
                     first_command = next(iter(q[project][business]))
                     return (
                         gr.update(choices=list(q[project][business].keys()), value=first_command),
@@ -604,6 +607,8 @@ def build_ui() -> gr.Blocks:
                     )
 
                 def _select_command(project, business, command):
+                    if (project, business) == yongfeng_image_section:
+                        return gr.skip()
                     return q[project][business][command]
 
                 project_select.change(
@@ -724,14 +729,22 @@ def build_ui() -> gr.Blocks:
                         container=False,
                         autofocus=True,
                         lines=3,
+                        elem_id="briefme_message",
                     )
-                    submit_btn = gr.Button("发送", scale=1, variant="primary")
+                    submit_btn = gr.Button(
+                        "发送", scale=1, variant="primary", elem_id="briefme_send"
+                    )
 
                 with gr.Row():
                     clear_btn = gr.Button("🗑 清空对话", size="sm")
 
-                def _fill_message(text):
-                    return text
+                def _fill_message(text, project, business, command):
+                    if (project, business) == yongfeng_image_section:
+                        selected = q[project][business].get(command)
+                        if selected is None:
+                            return gr.skip(), gr.skip()
+                        return selected, selected
+                    return text, gr.skip()
 
                 # ------- 档位 5 · 产物下载面板 -------
                 with gr.Accordion(
@@ -934,7 +947,7 @@ def build_ui() -> gr.Blocks:
             """永锋 datasets/ zip 上传到金睛平台（单独指令，逐日流式汇报）。"""
             history = _normalize_chat_history(history)
             dest = (save_dir or "").strip() or _parse_save_path(message)
-            dates = parse_yongfeng_dates(message)
+            dates = parse_yongfeng_dates(message.replace("～", "到").replace("~", "到"))
             xlsx, pptx, imgs = _scan_latest_artifacts()
             if not dest:
                 history.append({
@@ -965,7 +978,8 @@ def build_ui() -> gr.Blocks:
                     f"📤 开始上传 {date_label} 的【永锋】数据集 zip 到金睛平台\n"
                     f"（pre-athena-mv.cisdigital.cn，无标注模式导入）\n"
                     f"目录：{dest}\n"
-                    "每个 zip 上传后会自动建导入任务并等待结果。"
+                    "每个 zip 上传后会自动建导入任务并等待结果。\n"
+                    f"上传日志：{dest}/upload_progress.log"
                 ),
             })
             yield history, session, xlsx, pptx, imgs, None
@@ -1076,6 +1090,13 @@ def build_ui() -> gr.Blocks:
                         user_message = "".join(text_parts).strip()
                     else:
                         user_message = str(content).strip()
+
+                    if last_item.get("role") != "user" and (
+                        is_yongfeng_dataset_upload(user_message)
+                        or is_yongfeng_image_download(user_message)
+                    ):
+                        yield (gr.skip(),) * 6
+                        return
 
             agent._default_shenglong_output_dir = (save_dir or "").strip()
             agent._default_yongfeng_output_dir = (save_dir or "").strip()
@@ -1209,7 +1230,35 @@ def build_ui() -> gr.Blocks:
             outputs=command_preview,
             queue=False,
         )
-        fill_btn.click(_fill_message, inputs=command_preview, outputs=msg, queue=False)
+        fill_btn.click(
+            _fill_message,
+            inputs=[command_preview, project_select, business_select, command_select],
+            outputs=[msg, command_preview],
+            queue=False,
+        ).success(
+            fn=None,
+            inputs=[project_select, business_select],
+            js="""(project, business) => {
+                if (project !== "永锋钢铁" || business !== "检判原图上传下载") return;
+                const input = document.querySelector("#briefme_message textarea");
+                if (!input) return;
+                input.focus();
+                if (input.dataset.yongfengEnterBound) return;
+                input.dataset.yongfengEnterBound = "true";
+                input.addEventListener("keydown", (event) => {
+                    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+                    const text = input.value.trim();
+                    const download = /^下载 [0-9、,，到至～~ -]+ 的【永锋】检判原图$/.test(text);
+                    const upload = /^上传 [0-9、,，到至～~ -]+ 的【永锋】数据集$/.test(text);
+                    if (!download && !upload) return;
+                    const send = document.querySelector("#briefme_send:is(button), #briefme_send button");
+                    if (!send || send.disabled) return;
+                    event.preventDefault();
+                    if (!event.repeat) send.click();
+                });
+            }""",
+            queue=False,
+        )
 
     return demo
 
@@ -1221,9 +1270,9 @@ GRADIO_SHARE = False
 
 if __name__ == "__main__":
     demo = build_ui()
+    # 由 Gradio 从 7860（或 GRADIO_SERVER_PORT）起查找可用端口。
     demo.launch(
         server_name=GRADIO_SERVER_NAME,
-        server_port=7860,
         share=GRADIO_SHARE,
         theme=THEME,
         css=CUSTOM_CSS,

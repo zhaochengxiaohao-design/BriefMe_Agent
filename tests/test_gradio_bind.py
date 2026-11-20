@@ -43,3 +43,19 @@ def test_gradio_launch_stays_on_loopback_without_share() -> None:
     assert keywords["server_name"].id == "GRADIO_SERVER_NAME"
     assert isinstance(keywords["share"], ast.Name)
     assert keywords["share"].id == "GRADIO_SHARE"
+
+
+def test_yongfeng_upload_shortcut_uses_selection_if_preview_is_stale(monkeypatch):
+    monkeypatch.setenv("GRADIO_ANALYTICS_ENABLED", "False")
+    import app
+
+    monkeypatch.setattr(app, "_status_html", lambda: "")
+    ui = app.build_ui()
+    dep = next(item for item in ui.config["dependencies"] if item["api_name"] == "_fill_message")
+    fill_command = ui.fns[dep["id"]].fn
+    project, business = "永锋钢铁", "检判原图上传下载"
+    shortcuts = app._quick_prompts()[project][business]
+    stale_preview = shortcuts["下载昨日检判原图"]
+    choice = "上传昨日数据集"
+    draft, preview = fill_command(stale_preview, project, business, choice)
+    assert draft == preview == shortcuts[choice]

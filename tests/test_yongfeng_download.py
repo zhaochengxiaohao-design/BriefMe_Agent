@@ -27,6 +27,7 @@ from agent.yongfeng.downloader import (
     _try_rename_dir,
     _unique_truck_dir,
     _write_flow_mark,
+    iter_download_images,
     parse_requested_dates,
 )
 from agent.yongfeng.scrap_client import YongfengScrapClient, _token_from_login
@@ -508,6 +509,21 @@ def test_looks_like_image_rejects_html_poison():
     assert not _looks_like_image(b"<html>not a jpeg</html>")
     assert not _looks_like_image(b"")
     print("image magic OK")
+
+
+def test_interrupted_download_marks_progress_error(tmp_path, monkeypatch):
+    import json
+    import pytest
+
+    monkeypatch.chdir(tmp_path)
+    with patch.object(YongfengScrapClient, "query_list_by_date", side_effect=RuntimeError("HTTP 503")):
+        with pytest.raises(RuntimeError, match="503"):
+            list(iter_download_images(output_dir=tmp_path, dates=["2026-11-17"]))
+    progress = json.loads((tmp_path / "download_progress.json").read_text(encoding="utf-8"))
+    assert progress["status"] == "error"
+    assert progress["current_date"] == "2026-11-17"
+    assert "HTTP 503" in progress["error"]
+    assert "下载中断" in (tmp_path / "download_progress.log").read_text(encoding="utf-8")
 
 
 def test_query_list_paginates_with_pageindex():
